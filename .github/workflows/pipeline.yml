@@ -30,9 +30,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
       # Cache JADX Installation
       - name: Cache JADX
         id: cache-jadx
@@ -41,32 +38,34 @@ jobs:
           path: /usr/local/jadx
           key: jadx-1.5.6-v1
 
-      # Cache Cargo Binaries (apkeep)
-      - name: Cache Cargo Binaries
-        id: cache-cargo
+      # Cache apkeep Binary
+      - name: Cache apkeep
+        id: cache-apkeep
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/apkeep
-          key: cargo-apkeep-v1
+          path: /usr/local/bin/apkeep
+          key: apkeep-1.0.0-v1
 
       - name: Install System Dependencies & Tools
         run: |
-          sudo apt-get update && sudo apt-get install -y jq curl unzip
-          pip install mobsfscan
+          sudo apt-get update && sudo apt-get install -y jq curl unzip ripgrep
+          pip install --no-cache-dir mobsfscan
 
           # Install JADX if not retrieved from cache
           if [ "${{ steps.cache-jadx.outputs.cache-hit }}" != 'true' ]; then
             JADX_VER="1.5.6"
-            curl -L -o jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip"
+            curl -sSL -o jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip"
             sudo mkdir -p /usr/local/jadx
             sudo unzip -q jadx.zip -d /usr/local/jadx
             rm jadx.zip
           fi
           sudo ln -sf /usr/local/jadx/bin/jadx /usr/local/bin/jadx
 
-          # Install apkeep via cargo if not retrieved from cache
-          if [ "${{ steps.cache-cargo.outputs.cache-hit }}" != 'true' ]; then
-            cargo install apkeep
+          # Install apkeep precompiled binary directly (avoids slow Cargo compilation)
+          if [ "${{ steps.cache-apkeep.outputs.cache-hit }}" != 'true' ] || [ ! -f /usr/local/bin/apkeep ]; then
+            curl -sSL -o /tmp/apkeep "https://github.com/EFForg/apkeep/releases/download/1.0.0/apkeep-x86_64-unknown-linux-gnu"
+            chmod +x /tmp/apkeep
+            sudo mv /tmp/apkeep /usr/local/bin/apkeep
           fi
 
       - name: Execute Pipeline Engine
@@ -74,7 +73,17 @@ jobs:
           REPORT_ENCRYPTION_KEY: ${{ secrets.REPORT_ENCRYPTION_KEY }}
         run: |
           chmod +x .github/scripts/run_pipeline.sh
+          chmod +x .github/scripts/fetch_targets.sh
           ./.github/scripts/run_pipeline.sh
 
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'public'
+
       - name: Deploy Final Static Site to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

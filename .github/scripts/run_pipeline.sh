@@ -36,40 +36,20 @@ if [ ! -f "$STATUS_FILE" ]; then
   echo '{"status": "Initializing", "completed": 0, "total": 0, "current_app": "None", "history": []}' > "$STATUS_FILE"
 fi
 
-# 3. Download All APKs
-echo "[+] Starting download loop for $TOTAL targets..."
-for pkg in $PACKAGES; do
-  [ -z "$pkg" ] && continue
-  if [ ! -f "$APK_DIR/${pkg}.apk" ]; then
-    echo "[*] Downloading ${pkg}..."
-    apkeep -a "$pkg" "$APK_DIR/" || echo "[-] Download failed for ${pkg}, skipping..."
-  fi
-done
-
-# 4. Commit Downloaded APKs (< 95MB)
-echo "[+] Committing eligible APK binaries to repository..."
-for apk in "$APK_DIR"/*.apk; do
-  [ -f "$apk" ] || continue
-  size=$(du -m "$apk" | cut -f1)
-  if [ "$size" -lt 95 ]; then
-    git add "$apk"
-  else
-    echo "[-] Skipping git tracking for $apk ($size MB exceeds 95MB limit)"
-  fi
-done
-
-git commit -m "chore: store downloaded APK binaries [skip ci]" || echo "[*] No new APKs to commit."
-git push origin main || echo "[-] Push failed or no new APK changes."
-
-# 5. Sequential Analysis, Encryption, and Live Commit Loop
-echo "[+] Starting analysis, scanning, and encryption loop..."
-for apk in "$APK_DIR"/*.apk; do
-  [ -f "$apk" ] || continue
+# 3. Process targets sequentially (Download -> Decompile -> Scan -> Encrypt -> Clean)
+echo "[+] Starting processing loop for $TOTAL targets..."
+for pkg_name in $PACKAGES; do
+  [ -z "$pkg_name" ] && continue
   ((CURRENT_COUNT++))
-  pkg_name=$(basename "$apk" .apk)
+
+  # Check if report already exists to support idempotent resumption
+  if [ -f "$REPORT_DIR/${pkg_name}/mobsfscan.json.enc" ] && [ -f "$REPORT_DIR/${pkg_name}/secrets.txt.enc" ]; then
+    echo "[*] ($CURRENT_COUNT/$TOTAL) Reports already exist for $pkg_name. Skipping."
+    continue
+  fi
 
   echo "=========================================="
-  echo "[*] Analyzing ($CURRENT_COUNT/$TOTAL): $pkg_name"
+  echo "[*] Processing ($CURRENT_COUNT/$TOTAL): $pkg_name"
   echo "=========================================="
 
   # Update UI Dashboard state
@@ -77,46 +57,76 @@ for apk in "$APK_DIR"/*.apk; do
      '.status = "Analyzing" | .current_app = $app | .completed = $cur | .total = $tot' \
      "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
 
-  # Decompile via JADX
-  jadx -d "$WORKDIR/decompiled_${pkg_name}" "$apk" --no-res || echo "[-] JADX warning on $pkg_name"
+  # Download individual APK
+  apk_file="$APK_DIR/${pkg_name}.apk"
+  if [ ! -f "$apk_file" ]; then
+    echo "[*] Downloading APK for ${pkg_name}..."
+    apkeep -a "$pkg_name" "$APK_DIR/" || true
+  fi
 
-  # Secret Regex Scan & MobSF Static Analysis
+  if [ ! -f "$apk_file" ]; then
+    echo "[-] Warning: APK for ${pkg_name} could not be downloaded. Skipping."
+    continue
+  fi
+
+  decompiled_dir="$WORKDIR/decompiled_${pkg_name}"
   mkdir -p "$REPORT_DIR/${pkg_name}"
-  strings "$apk" | grep -Ei "https?://|api_key|secret|token|bearer" > "$REPORT_DIR/${pkg_name}/secrets_raw.txt" || true
-  mobsfscan "$WORKDIR/decompiled_${pkg_name}" --json -o "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" || true
 
-  # Encrypt Raw Findings
-  openssl enc -aes-256-cbc -salt -pbkdf2 \
+  # Decompile via JADX
+  jadx -d "$decompiled_dir" "$apk_file" --no-res || echo "[-] JADX warning on $pkg_name"
+
+  # Scan for secrets in decompiled source files (Java, XML, properties, json)
+  echo "[*] Scanning for potential secrets and tokens..."
+  if [ -d "$decompiled_dir" ]; then
+    rg -i -n \
+      "(?:api[_-]?key|secret|token|bearer|aws[_-]?key|firebase|client[_-]?secret)[\s:='\"]+[\w\-\.]{8,}" \
+      "$decompiled_dir" > "$REPORT_DIR/${pkg_name}/secrets_raw.txt" || true
+  else
+    touch "$REPORT_DIR/${pkg_name}/secrets_raw.txt"
+  fi
+
+  # MobSF Static Analysis
+  echo "[*] Running mobsfscan..."
+  mobsfscan "$decompiled_dir" --json -o "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" || echo "{}" > "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json"
+
+  # Ensure outputs exist even if scan yielded nothing
+  [ -f "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" ] || echo "{}" > "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json"
+  [ -f "$REPORT_DIR/${pkg_name}/secrets_raw.txt" ] || touch "$REPORT_DIR/${pkg_name}/secrets_raw.txt"
+
+  # Encrypt Findings with OpenSSL AES-256-CBC PBKDF2 (100,000 iterations for Web Crypto API compatibility)
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
     -in "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" \
     -out "$REPORT_DIR/${pkg_name}/mobsfscan.json.enc" \
     -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A
 
-  openssl enc -aes-256-cbc -salt -pbkdf2 \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
     -in "$REPORT_DIR/${pkg_name}/secrets_raw.txt" \
     -out "$REPORT_DIR/${pkg_name}/secrets.txt.enc" \
     -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A
 
-  # Remove unencrypted artifacts & decompiled source immediately
+  # Clean Up ephemeral artifacts, APK binary, and decompiled source immediately
   rm -f "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" "$REPORT_DIR/${pkg_name}/secrets_raw.txt"
-  rm -rf "$WORKDIR/decompiled_${pkg_name}"
+  rm -rf "$decompiled_dir" "$apk_file"
 
   # Update JSON Execution Record
   jq --arg app "$pkg_name" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-     '.history += [{"package": $app, "timestamp": $time}]' \
+     '.history = ([{"package": $app, "timestamp": $time}] + (.history // [] | map(select(.package != $app))))' \
      "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
 
-  # Commit & Push individual report instantly
+  # Commit & Push individual report cleanly with rebase
   git add public/
   git commit -m "feat(report): encrypted analysis for $pkg_name [skip ci]" || true
-  git push origin main || echo "[-] Push retry deferred for $pkg_name"
+  git pull --rebase origin main || true
+  git push origin main || echo "[-] Push deferred for $pkg_name"
 
-  echo "[+] Cleaned work directory for $pkg_name."
+  echo "[+] Analysis complete and cleaned for $pkg_name."
 done
 
-# 6. Final Pipeline Execution Status Update
+# 4. Final Pipeline Execution Status Update
 jq '.status = "Idle" | .current_app = "None"' "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
 git add "$STATUS_FILE"
 git commit -m "chore: pipeline batch completed [skip ci]" || true
+git pull --rebase origin main || true
 git push origin main || true
 
 echo "[+] Pipeline execution completed successfully."
