@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Security Scanner</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; margin: 2rem; }
+        .card { background: #1e293b; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; border: 1px solid #334155; }
+        .status-badge { background: #0284c7; color: #fff; padding: 4px 10px; border-radius: 4px; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { border: 1px solid #334155; padding: 10px; text-align: left; }
+        th { background: #1e293b; }
+        a { color: #38bdf8; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Automated Target App Scanner</h1>
+
+    <div class="card">
+        <h3>Live Engine Status</h3>
+        <p>State: <span id="state" class="status-badge">Idle</span></p>
+        <p>Active Target: <code id="current-app">None</code></p>
+        <p>Progress: <span id="progress">0/0</span></p>
+    </div>
+
+    <h3>Analyzed Applications</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Package ID</th>
+                <th>Timestamp (UTC)</th>
+                <th>Reports</th>
+            </tr>
+        </thead>
+        <tbody id="completed-apps"></tbody>
+    </table>
+
+    <script>
+        async function fetchStatus() {
+            try {
+                const response = await fetch('./status.json?t=' + Date.now(), {
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
+                });
+                const data = await response.json();
+
+                document.getElementById('state').innerText = data.status;
+                document.getElementById('current-app').innerText = data.current_app || 'None';
+                document.getElementById('progress').innerText = `${data.completed}/${data.total}`;
+
+                const list = document.getElementById('completed-apps');
+                list.innerHTML = '';
+                data.history.slice().reverse().forEach(item => {
+                    list.innerHTML += `
+                        <tr>
+                            <td>${item.package}</td>
+                            <td>${item.timestamp}</td>
+                            <td>
+                                <a href="./reports/${item.package}/secrets.txt" target="_blank">Secrets</a> | 
+                                <a href="./reports/${item.package}/jadx_summary.txt" target="_blank">JADX</a> | 
+                                <a href="./reports/${item.package}/mobsfscan.json" target="_blank">MobSF</a>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch(e) {
+                console.error("Error updating dashboard:", e);
+            }
+        }
+
+        setInterval(fetchStatus, 5000);
+        fetchStatus();
+    </script>
+</body>
+</html>

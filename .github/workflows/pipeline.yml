@@ -1,0 +1,58 @@
+name: Continuous Security Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight UTC
+  workflow_dispatch:      # Allows manual trigger
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java Runtime (for JADX)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install JADX, MobSFScan, and apkeep
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq curl unzip
+
+          # Install JADX CLI
+          JADX_VER="1.5.0"
+          curl -L -o jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip"
+          unzip -q jadx.zip -d /usr/local/jadx
+          ln -s /usr/local/jadx/bin/jadx /usr/local/bin/jadx
+
+          # Install MobSF CLI engine
+          pip install mobsfscan
+
+          # Install apkeep CLI
+          curl -s https://api.github.com/repos/evilsocket/apkeep/releases/latest \
+            | grep "browser_download_url.*x86_64-unknown-linux-musl" \
+            | cut -d : -f 2,3 | tr -d \" | xargs curl -L -o /usr/local/bin/apkeep
+          chmod +x /usr/local/bin/apkeep
+
+      - name: Execute Pipeline Engine
+        run: |
+          chmod +x .github/scripts/run_pipeline.sh
+          ./.github/scripts/run_pipeline.sh
+
+      - name: Deploy Final Static Site to GitHub Pages
+        uses: actions/deploy-pages@v4
