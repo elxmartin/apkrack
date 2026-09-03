@@ -1,7 +1,12 @@
 {
-  "status": "Idle",
-  "completed": 0,
-  "total": 0,
-  "current_app": "None",
-  "history": []
+  "status": "Analyzing",
+  "completed": 14,
+  "total": 333,
+  "current_app": "ch.bnb.bnb",
+  "history": [
+    {
+      "package": "ch.bnb.bnb",
+      "timestamp": "2026-09-03T07:42:36Z"
+    }
+  ]
 }
