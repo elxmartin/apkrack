@@ -1,8 +1,8 @@
 {
   "status": "Analyzing",
-  "completed": 19,
+  "completed": 38,
   "total": 333,
-  "current_app": "ch.protonmail.android",
+  "current_app": "com.appgenix.bizcal",
   "history": [
     {
       "package": "ch.bnb.bnb",
@@ -11,6 +11,10 @@
     {
       "package": "ch.protonmail.android",
       "timestamp": "2026-09-03T07:45:48Z"
+    },
+    {
+      "package": "com.appgenix.bizcal",
+      "timestamp": "2026-09-03T07:47:37Z"
     }
   ]
 }
