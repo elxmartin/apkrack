@@ -1,12 +1,16 @@
 {
   "status": "Analyzing",
-  "completed": 14,
+  "completed": 19,
   "total": 333,
-  "current_app": "ch.bnb.bnb",
+  "current_app": "ch.protonmail.android",
   "history": [
     {
       "package": "ch.bnb.bnb",
       "timestamp": "2026-09-03T07:42:36Z"
+    },
+    {
+      "package": "ch.protonmail.android",
+      "timestamp": "2026-09-03T07:45:48Z"
     }
   ]
 }
