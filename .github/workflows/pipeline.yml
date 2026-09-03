@@ -32,22 +32,25 @@ jobs:
 
       - name: Install JADX, MobSFScan, and apkeep
         run: |
-          sudo apt-get update && sudo apt-get install -y jq curl unzip
+              sudo apt-get update && sudo apt-get install -y jq curl unzip
 
-          # Install JADX CLI
-          JADX_VER="1.5.0"
-          curl -L -o jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip"
-          unzip -q jadx.zip -d /usr/local/jadx
-          ln -s /usr/local/jadx/bin/jadx /usr/local/bin/jadx
+              # Install JADX CLI (Added sudo)
+              JADX_VER="1.5.0"
+              curl -L -o jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip"
+              sudo mkdir -p /usr/local/jadx
+              sudo unzip -q jadx.zip -d /usr/local/jadx
+              sudo ln -sf /usr/local/jadx/bin/jadx /usr/local/bin/jadx
+              rm jadx.zip
 
-          # Install MobSF CLI engine
-          pip install mobsfscan
+              # Install MobSF CLI engine
+              pip install mobsfscan
 
-          # Install apkeep CLI
-          curl -s https://api.github.com/repos/evilsocket/apkeep/releases/latest \
-            | grep "browser_download_url.*x86_64-unknown-linux-musl" \
-            | cut -d : -f 2,3 | tr -d \" | xargs curl -L -o /usr/local/bin/apkeep
-          chmod +x /usr/local/bin/apkeep
+              # Install apkeep CLI
+              curl -s https://api.github.com/repos/evilsocket/apkeep/releases/latest \
+                | grep "browser_download_url.*x86_64-unknown-linux-musl" \
+                | cut -d : -f 2,3 | tr -d \" | xargs curl -L -o apkeep
+              chmod +x apkeep
+              sudo mv apkeep /usr/local/bin/apkeep
 
       - name: Execute Pipeline Engine
         run: |
