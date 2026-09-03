@@ -70,6 +70,8 @@ jobs:
           fi
 
       - name: Execute Pipeline Engine
+        env:
+          REPORT_ENCRYPTION_KEY: ${{ secrets.REPORT_ENCRYPTION_KEY }}
         run: |
           chmod +x .github/scripts/run_pipeline.sh
           ./.github/scripts/run_pipeline.sh
