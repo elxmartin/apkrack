@@ -1,74 +1,60 @@
 #!/usr/bin/env bash
+set -e
 
-WORKDIR="$(pwd)"
-APK_DIR="$WORKDIR/apks"
-REPORT_DIR="$WORKDIR/public/reports"
-STATUS_FILE="$WORKDIR/public/status.json"
+mkdir -p apks reports
 
-mkdir -p "$APK_DIR" "$REPORT_DIR"
+# 1. Download all targets sequentially
+echo "[+] Starting download of target APKs..."
+while read -r pkg; do
+  [ -z "$pkg" ] && continue
+  if [ ! -f "apks/${pkg}.apk" ]; then
+    echo "[*] Downloading ${pkg}..."
+    apkeep -a "$pkg" apks/ || echo "[-] Download failed for ${pkg}, skipping..."
+  fi
+done < targets.txt
 
-# Configure Git credentials for in-job commits
-git config user.name "Github Actions Runner"
-git config user.email "runner@github.com"
+# 2. Stage and commit small APK binaries to repository safely (< 95MB)
+echo "[+] Committing downloaded APKs to repository..."
+git config user.name "github-actions[bot]"
+git config user.email "github-actions[bot]@users.noreply.github.com"
 
-# Fetch and resolve target packages
-chmod +x .github/scripts/fetch_targets.sh
-./.github/scripts/fetch_targets.sh
-
-PACKAGES=$(cat extracted_apps.txt)
-TOTAL=$(echo "$PACKAGES" | wc -l)
-CURRENT_COUNT=0
-
-# Ensure status.json exists
-if [ ! -f "$STATUS_FILE" ]; then
-    echo '{"status": "Running", "completed": 0, "total": 0, "current_app": "Initializing", "history": []}' > "$STATUS_FILE"
-fi
-
-for pkg in $PACKAGES; do
-    ((CURRENT_COUNT++))
-    
-    # Update live status: Downloading
-    jq --arg app "$pkg" --argjson cur "$CURRENT_COUNT" --argjson tot "$TOTAL" \
-       '.status = "Analyzing" | .current_app = $app | .completed = $cur | .total = $tot' \
-       "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
-    
-    # Download App using apkeep (APKPure fallback chain)
-    apkeep -d apk-pure -a "$pkg" "$APK_DIR/" || continue
-    APK_FILE=$(find "$APK_DIR" -name "*.apk" | head -n 1)
-
-    if [ -f "$APK_FILE" ]; then
-        TARGET_REPORT="$REPORT_DIR/$pkg"
-        mkdir -p "$TARGET_REPORT"
-
-        # 1. Regex Secret Extraction
-        strings "$APK_FILE" | grep -Ei "https?://|api_key|secret|token|bearer" > "$TARGET_REPORT/secrets.txt" || true
-        
-        # 2. JADX Decompilation & Hardcoded Key Scan
-        jadx -d "$APK_DIR/decompiled" "$APK_FILE" --no-res || true
-        if [ -d "$APK_DIR/decompiled" ]; then
-            grep -rnE "AIzaSy|AWS|secret_key|bearer" "$APK_DIR/decompiled/" > "$TARGET_REPORT/jadx_summary.txt" || true
-            
-            # 3. MobSF Static Analysis Engine
-            mobsfscan "$APK_DIR/decompiled" --json -o "$TARGET_REPORT/mobsfscan.json" || true
-        fi
-
-        # Immediate Disk Space Cleanup
-        rm -rf "$APK_DIR"/*
-
-        # Update JSON record
-        jq --arg app "$pkg" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-           '.history += [{"package": $app, "timestamp": $time}]' \
-           "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
-
-        # Push immediate live update commit
-        git add public/
-        git commit -m "Analyzed target app: $pkg [skip ci]" || true
-        git push origin main || true
-    fi
+for apk in apks/*.apk; do
+  [ -f "$apk" ] || continue
+  # Get size in MB
+  size=$(du -m "$apk" | cut -f1)
+  if [ "$size" -lt 95 ]; then
+    git add "$apk"
+  else
+    echo "[-] Skipping git track for $apk ($size MB exceeds GitHub limit)"
+  fi
 done
 
-# Set job status to Idle on completion
-jq '.status = "Idle" | .current_app = "None"' "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
-git add public/status.json
-git commit -m "Pipeline finished execution [skip ci]" || true
-git push origin main || true
+git commit -m "chore: store downloaded APK binaries" || echo "[*] No new APKs to commit."
+git push origin main || echo "[-] Push failed or nothing to push."
+
+# 3. Process each APK sequentially (Decompile -> Scan -> Commit Report -> Clean)
+echo "[+] Starting sequential analysis loop..."
+for apk in apks/*.apk; do
+  [ -f "$apk" ] || continue
+  pkg_name=$(basename "$apk" .apk)
+  
+  echo "=========================================="
+  echo "[*] Processing: $pkg_name"
+  echo "=========================================="
+
+  # Decompile
+  jadx -d "decompiled_${pkg_name}" "$apk" || echo "[-] JADX warning on $pkg_name"
+
+  # Scan with MobSF
+  mobsfscan "decompiled_${pkg_name}" --json -o "reports/${pkg_name}.json" || true
+
+  # Remove decompiled directory immediately to clear disk space
+  rm -rf "decompiled_${pkg_name}"
+
+  # Commit & Push individual scan result immediately
+  git add "reports/${pkg_name}.json"
+  git commit -m "feat(report): add security analysis for $pkg_name" || true
+  git push origin main || echo "[-] Failed to push report for $pkg_name"
+  
+  echo "[+] Completed $pkg_name and cleaned up work directory."
+done
