@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 305,
+  "completed": 306,
   "total": 329,
-  "current_app": "io.gonative.android.xjndrq",
+  "current_app": "io.homeassistant.companion.android",
   "history": [
+    {
+      "package": "io.homeassistant.companion.android",
+      "timestamp": "2026-09-05T06:38:56Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "io.gonative.android.xjndrq",
       "timestamp": "2026-09-05T06:38:52Z",
