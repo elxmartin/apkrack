@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 243,
+  "completed": 246,
   "total": 329,
-  "current_app": "com.tenbis.tbapp",
+  "current_app": "com.threedflip.schweizerillustrierte",
   "history": [
+    {
+      "package": "com.threedflip.schweizerillustrierte",
+      "timestamp": "2026-09-05T06:35:44Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.tenbis.tbapp",
       "timestamp": "2026-09-05T06:35:30Z",
