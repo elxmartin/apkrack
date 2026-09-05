@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 255,
+  "completed": 305,
   "total": 329,
-  "current_app": "com.ua.shop",
+  "current_app": "io.gonative.android.xjndrq",
   "history": [
+    {
+      "package": "io.gonative.android.xjndrq",
+      "timestamp": "2026-09-05T06:38:52Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.ua.shop",
       "timestamp": "2026-09-05T06:36:14Z",
