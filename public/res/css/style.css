@@ -55,8 +55,6 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-.controls { display: flex; gap: 0.75rem; align-items: center; }
-
 /* Buttons & Inputs */
 .btn {
   background: var(--bg-card);

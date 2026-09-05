@@ -100,7 +100,6 @@ All security reports committed to the repository are protected using authenticat
    - Live runner status, active package indicator, and batch progress bar.
    - Horizontal stacked bar charts powered by **Chart.js** displaying Critical/High/Medium/Low CVE distributions.
    - Real-time client-side search and filtering.
-   - Session-cached encryption key manager with easy clear/set controls.
 
 ---
 

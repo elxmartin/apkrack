@@ -185,19 +185,20 @@ async function viewReport(packageName, fileName) {
     if (!modal || !modalTitle || !modalBody) return;
 
     modalTitle.textContent = `${packageName} — ${fileName.replace('.enc', '')}`;
-    modalBody.textContent = "Loading encrypted scan payload...";
+    modalBody.textContent = "Loading report...";
     modal.style.display = "block";
 
     try {
-        // Request payload through authenticated Cloudflare Worker route
-        const response = await fetch(`/api/report?path=/reports/${packageName}/${fileName}`);
-        
+        // Query the Cloudflare Worker gateway
+        const workerUrl = `https://apkrack.locamartin.workers.dev/api/report?package=${encodeURIComponent(packageName)}&file=${encodeURIComponent(fileName)}`;
+        const response = await fetch(workerUrl);
+
         if (!response.ok) {
             throw new Error("Not Allowed: Decryption Not Detected");
         }
 
         const dataText = await response.text();
-        
+
         try {
             const parsedJson = JSON.parse(dataText);
             modalBody.textContent = JSON.stringify(parsedJson, null, 2);
@@ -208,18 +209,3 @@ async function viewReport(packageName, fileName) {
         modalBody.textContent = err.message || "Not Allowed: Decryption Not Detected";
     }
 }
-
-function closeModal() {
-    const modal = document.getElementById('reportModal');
-    if (modal) modal.style.display = "none";
-}
-
-window.onclick = function(event) {
-    const modal = document.target === modal ? closeModal() : null;
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-    updateKeyIndicator();
-    fetchStatus();
-    setInterval(fetchStatus, 5000);
-});
