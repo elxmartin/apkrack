@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 246,
+  "completed": 255,
   "total": 329,
-  "current_app": "com.threedflip.schweizerillustrierte",
+  "current_app": "com.ua.shop",
   "history": [
+    {
+      "package": "com.ua.shop",
+      "timestamp": "2026-09-05T06:36:14Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.threedflip.schweizerillustrierte",
       "timestamp": "2026-09-05T06:35:44Z",
