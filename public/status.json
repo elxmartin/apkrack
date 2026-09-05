@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 71,
+  "completed": 94,
   "total": 329,
-  "current_app": "com.booking",
+  "current_app": "com.dominospizza",
   "history": [
+    {
+      "package": "com.dominospizza",
+      "timestamp": "2026-09-05T06:28:08Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.booking",
       "timestamp": "2026-09-05T06:24:20Z",
