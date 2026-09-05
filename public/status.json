@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 187,
+  "completed": 189,
   "total": 329,
-  "current_app": "com.paddypower_uk.livecasino",
+  "current_app": "com.panera.bread",
   "history": [
+    {
+      "package": "com.panera.bread",
+      "timestamp": "2026-09-05T06:33:24Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.paddypower_uk.livecasino",
       "timestamp": "2026-09-05T06:33:19Z",
