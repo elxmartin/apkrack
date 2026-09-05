@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 194,
+  "completed": 196,
   "total": 329,
-  "current_app": "com.pinterest",
+  "current_app": "com.pinterest.twa",
   "history": [
+    {
+      "package": "com.pinterest.twa",
+      "timestamp": "2026-09-05T06:33:46Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.pinterest",
       "timestamp": "2026-09-05T06:33:42Z",
