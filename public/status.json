@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 14,
+  "completed": 18,
   "total": 329,
-  "current_app": "ch.bnb.bnb",
+  "current_app": "ch.protonmail.android",
   "history": [
+    {
+      "package": "ch.protonmail.android",
+      "timestamp": "2026-09-05T06:20:56Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "ch.bnb.bnb",
       "timestamp": "2026-09-05T06:20:43Z",
@@ -13,10 +23,6 @@
         "medium": 0,
         "low": 0
       }
-    },
-    {
-      "package": "ch.protonmail.android",
-      "timestamp": "2026-09-03T07:45:48Z"
     },
     {
       "package": "com.appgenix.bizcal",
