@@ -6,11 +6,19 @@
   --border-focus: #38bdf8;
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
+  
+  /* Status & Severity Color Maps */
   --accent: #38bdf8;
   --accent-glow: rgba(56, 189, 248, 0.25);
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+
+  --critical: #ef4444;
+  --high: #f97316;
+  --medium: #eab308;
+  --low: #38bdf8;
+
   --radius: 12px;
 }
 

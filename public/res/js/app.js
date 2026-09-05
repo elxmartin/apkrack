@@ -1,6 +1,14 @@
 let cachedHistory = [];
 let cveChartInstance = null;
 
+/**
+ * Utility helper to extract CSS variable values with optional fallbacks
+ */
+function getThemeColor(varName, fallback) {
+    const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    return val || fallback;
+}
+
 function updateKeyIndicator() {
     const hasKey = !!sessionStorage.getItem("REPORT_ENCRYPTION_KEY");
     const indicator = document.getElementById("key-indicator");
@@ -118,21 +126,20 @@ function updateCveChart() {
     renderChartJS(labels, highCounts, mediumCounts, lowCounts);
 }
 
-function renderChartJS(labels, high, medium, low) {
+function renderChartJS(labels = [], high = [], medium = [], low = []) {
     const chartCanvas = document.getElementById('cveChart');
     if (!chartCanvas) return;
 
     const ctx = chartCanvas.getContext('2d');
     if (cveChartInstance) cveChartInstance.destroy();
 
-    // Dynamically pull CSS variables from :root computed styles
-    const computedStyles = getComputedStyle(document.documentElement);
-    const dangerColor = computedStyles.getPropertyValue('--danger').trim() || '#ef4444';
-    const warningColor = computedStyles.getPropertyValue('--warning').trim() || '#f59e0b';
-    const accentColor = computedStyles.getPropertyValue('--accent').trim() || '#38bdf8';
-    const textMainColor = computedStyles.getPropertyValue('--text-main').trim() || '#f8fafc';
-    const textMutedColor = computedStyles.getPropertyValue('--text-muted').trim() || '#94a3b8';
-    const borderColor = computedStyles.getPropertyValue('--border').trim() || 'rgba(51, 65, 85, 0.6)';
+    // Safely pull CSS colors with cascading fallbacks
+    const dangerColor  = getThemeColor('--critical', getThemeColor('--danger', '#ef4444'));
+    const warningColor = getThemeColor('--medium', getThemeColor('--warning', '#f59e0b'));
+    const accentColor  = getThemeColor('--low', getThemeColor('--accent', '#38bdf8'));
+    const textMainColor  = getThemeColor('--text-main', '#f8fafc');
+    const textMutedColor = getThemeColor('--text-muted', '#94a3b8');
+    const borderColor   = getThemeColor('--border', 'rgba(51, 65, 85, 0.6)');
 
     cveChartInstance = new Chart(ctx, {
         type: 'bar',
@@ -205,8 +212,7 @@ function closeModal() {
 }
 
 window.onclick = function(event) {
-    const modal = document.getElementById('reportModal');
-    if (event.target === modal) closeModal();
+    const modal = document.target === modal ? closeModal() : null;
 };
 
 document.addEventListener('DOMContentLoaded', () => {

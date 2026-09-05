@@ -2,7 +2,7 @@
  * UI Theme Loader
  * Dynamically applies colors and layout parameters from theme.json to CSS variables.
  */
-async function loadTheme(configPath = './res/css/theme.json') {
+async function loadTheme(configPath = './theme.json') {
     try {
         const response = await fetch(`${configPath}?v=${Date.now()}`);
         if (!response.ok) throw new Error(`Failed to load theme config (${response.status})`);
@@ -17,6 +17,12 @@ async function loadTheme(configPath = './res/css/theme.json') {
                 const cssVar = '--' + key.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
                 root.style.setProperty(cssVar, value);
             });
+
+            // Fallback aliases for Chart.js & KPI resolution
+            if (theme.colors.critical) root.style.setProperty('--danger', theme.colors.critical);
+            if (theme.colors.high) root.style.setProperty('--high', theme.colors.high);
+            if (theme.colors.medium) root.style.setProperty('--warning', theme.colors.medium);
+            if (theme.colors.low) root.style.setProperty('--accent', theme.colors.low);
         }
 
         // Map layout variables

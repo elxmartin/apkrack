@@ -316,3 +316,17 @@
     }
   ]
 }
+
+[
+  {
+    "package": "ch.protonmail.android",
+    "timestamp": "2026-09-03T07:45:48Z",
+    "status": "completed",
+    "cve_summary": {
+      "critical": 2,
+      "high": 5,
+      "medium": 8,
+      "low": 1
+    }
+  }
+]
