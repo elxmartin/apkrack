@@ -2,8 +2,8 @@ name: Continuous Security Pipeline
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # Runs daily at midnight UTC
-  workflow_dispatch:      # Allows manual trigger
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -30,7 +30,6 @@ jobs:
         with:
           python-version: '3.10'
 
-      # Cache JADX Installation
       - name: Cache JADX
         id: cache-jadx
         uses: actions/cache@v4
@@ -38,7 +37,6 @@ jobs:
           path: /usr/local/jadx
           key: jadx-1.5.6-v1
 
-      # Cache apkeep Binary
       - name: Cache apkeep
         id: cache-apkeep
         uses: actions/cache@v4
@@ -46,12 +44,15 @@ jobs:
           path: /usr/local/bin/apkeep
           key: apkeep-1.0.0-v1
 
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
       - name: Install System Dependencies & Tools
         run: |
           sudo apt-get update && sudo apt-get install -y jq curl unzip ripgrep
-          pip install --no-cache-dir mobsfscan
+          pip install --no-cache-dir mobsfscan pyyaml
 
-          # Install JADX if not retrieved from cache
           if [ "${{ steps.cache-jadx.outputs.cache-hit }}" != 'true' ]; then
             JADX_VER="1.5.6"
             curl -sSL -o jadx.zip "https://github.com/skylot/jadx/releases/download/v${JADX_VER}/jadx-${JADX_VER}.zip"
@@ -61,7 +62,6 @@ jobs:
           fi
           sudo ln -sf /usr/local/jadx/bin/jadx /usr/local/bin/jadx
 
-          # Install apkeep precompiled binary directly (avoids slow Cargo compilation)
           if [ "${{ steps.cache-apkeep.outputs.cache-hit }}" != 'true' ] || [ ! -f /usr/local/bin/apkeep ]; then
             curl -sSL -o /tmp/apkeep "https://github.com/EFForg/apkeep/releases/download/1.0.0/apkeep-x86_64-unknown-linux-gnu"
             chmod +x /tmp/apkeep
@@ -72,6 +72,7 @@ jobs:
         env:
           REPORT_ENCRYPTION_KEY: ${{ secrets.REPORT_ENCRYPTION_KEY }}
         run: |
+          trivy image --download-db-only
           chmod +x .github/scripts/run_pipeline.sh
           chmod +x .github/scripts/fetch_targets.sh
           ./.github/scripts/run_pipeline.sh

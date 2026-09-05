@@ -1,0 +1,25 @@
+{
+  "themeName": "APKrack Cyberpunk Dark",
+  "colors": {
+    "bgPrimary": "#090d16",
+    "bgCard": "rgba(15, 23, 42, 0.75)",
+    "bgCardHover": "rgba(30, 41, 59, 0.85)",
+    "border": "rgba(51, 65, 85, 0.6)",
+    "borderFocus": "#38bdf8",
+    "textMain": "#f8fafc",
+    "textMuted": "#94a3b8",
+    "accent": "#38bdf8",
+    "accentGlow": "rgba(56, 189, 248, 0.25)",
+    "success": "#22c55e",
+    "warning": "#f59e0b",
+    "danger": "#ef4444"
+  },
+  "layout": {
+    "radius": "12px"
+  },
+  "chartColors": {
+    "highCritical": "#ef4444",
+    "medium": "#f59e0b",
+    "low": "#38bdf8"
+  }
+}

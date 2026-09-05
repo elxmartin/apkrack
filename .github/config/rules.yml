@@ -1,0 +1,20 @@
+rules:
+  - id: google-api-key
+    name: Google API Key
+    pattern: 'AIza[0-9A-Za-z\-_]{35}'
+
+  - id: firebase-db
+    name: Firebase Database URL
+    pattern: 'https://[a-z0-9\-]+-default-rtdb\.firebaseio\.com'
+
+  - id: aws-access-key
+    name: AWS Access Key ID
+    pattern: '(?:AKIA|ASIA)[0-9A-Z]{16}'
+
+  - id: jwt-token
+    name: Generic JWT Token
+    pattern: 'eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*'
+
+  - id: generic-secret
+    name: Generic API Key / Token Assignment
+    pattern: '(?i)(?:api[_-]?key|secret|token|bearer|password)[\s:=''\"]+[\w\-\.]{8,}'

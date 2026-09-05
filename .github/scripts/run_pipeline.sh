@@ -1,26 +1,33 @@
 #!/usr/bin/env bash
-set -e
+set -o pipefail
 
 WORKDIR="$(pwd)"
 APK_DIR="$WORKDIR/apks"
 REPORT_DIR="$WORKDIR/public/reports"
 STATUS_FILE="$WORKDIR/public/status.json"
+CONFIG_FILE="$WORKDIR/.github/config/rules.yml"
 
 mkdir -p "$APK_DIR" "$REPORT_DIR"
 
-# 1. Require Encryption Key
+# 1. Check for Encryption Key
 if [ -z "$REPORT_ENCRYPTION_KEY" ]; then
-  echo "[-] ERROR: REPORT_ENCRYPTION_KEY secret environment variable is not set."
+  echo "[-] ERROR: REPORT_ENCRYPTION_KEY environment variable is not set."
   exit 1
 fi
 
-# Configure Git Author
+# Configure Git Bot Identity
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 
+# Compute combined secret-scanning regex once globally
+COMBINED_PATTERN=""
+if [ -f "$CONFIG_FILE" ]; then
+  COMBINED_PATTERN=$(jq -r '.rules[].pattern' <(python3 -c 'import sys, yaml, json; print(json.dumps(yaml.safe_load(sys.stdin)))' < "$CONFIG_FILE") | paste -sd "|" -)
+fi
+
 # 2. Extract targets dynamically via bbscope
 chmod +x .github/scripts/fetch_targets.sh
-./.github/scripts/fetch_targets.sh
+./.github/scripts/fetch_targets.sh || true
 
 if [ ! -f "extracted_apps.txt" ]; then
   echo "[-] ERROR: extracted_apps.txt not found."
@@ -31,20 +38,17 @@ PACKAGES=$(cat extracted_apps.txt)
 TOTAL=$(echo "$PACKAGES" | grep -c '.' || true)
 CURRENT_COUNT=0
 
-# Ensure status.json baseline exists
 if [ ! -f "$STATUS_FILE" ]; then
   echo '{"status": "Initializing", "completed": 0, "total": 0, "current_app": "None", "history": []}' > "$STATUS_FILE"
 fi
 
-# 3. Process targets sequentially (Download -> Decompile -> Scan -> Encrypt -> Clean)
 echo "[+] Starting processing loop for $TOTAL targets..."
 for pkg_name in $PACKAGES; do
   [ -z "$pkg_name" ] && continue
   ((CURRENT_COUNT++))
 
-  # Check if report already exists to support idempotent resumption
-  if [ -f "$REPORT_DIR/${pkg_name}/mobsfscan.json.enc" ] && [ -f "$REPORT_DIR/${pkg_name}/secrets.txt.enc" ]; then
-    echo "[*] ($CURRENT_COUNT/$TOTAL) Reports already exist for $pkg_name. Skipping."
+  if [ -f "$REPORT_DIR/${pkg_name}/mobsfscan.json.enc" ] && [ -f "$REPORT_DIR/${pkg_name}/secrets.txt.enc" ] && [ -f "$REPORT_DIR/${pkg_name}/cve.json.enc" ]; then
+    echo "[*] ($CURRENT_COUNT/$TOTAL) Skipped (already analyzed): $pkg_name"
     continue
   fi
 
@@ -52,20 +56,16 @@ for pkg_name in $PACKAGES; do
   echo "[*] Processing ($CURRENT_COUNT/$TOTAL): $pkg_name"
   echo "=========================================="
 
-  # Update UI Dashboard state
   jq --arg app "$pkg_name" --argjson cur "$CURRENT_COUNT" --argjson tot "$TOTAL" \
      '.status = "Analyzing" | .current_app = $app | .completed = $cur | .total = $tot' \
-     "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
+     "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE" || true
 
-  # Download individual APK
   apk_file="$APK_DIR/${pkg_name}.apk"
-  if [ ! -f "$apk_file" ]; then
-    echo "[*] Downloading APK for ${pkg_name}..."
-    apkeep -a "$pkg_name" "$APK_DIR/" || true
-  fi
+  apkeep -a "$pkg_name" "$APK_DIR/" || true
 
   if [ ! -f "$apk_file" ]; then
-    echo "[-] Warning: APK for ${pkg_name} could not be downloaded. Skipping."
+    echo "[-] Download failed for $pkg_name. Skipping."
+    rm -rf "$APK_DIR/*" || true
     continue
   fi
 
@@ -73,47 +73,51 @@ for pkg_name in $PACKAGES; do
   mkdir -p "$REPORT_DIR/${pkg_name}"
 
   # Decompile via JADX
-  jadx -d "$decompiled_dir" "$apk_file" --no-res || echo "[-] JADX warning on $pkg_name"
+  jadx -d "$decompiled_dir" "$apk_file" --no-res --show-bad-code --threads 4 || echo "[-] JADX warning on $pkg_name"
 
-  # Scan for secrets in decompiled source files (Java, XML, properties, json)
-  echo "[*] Scanning for potential secrets and tokens..."
-  if [ -d "$decompiled_dir" ]; then
-    rg -i -n \
-      "(?:api[_-]?key|secret|token|bearer|aws[_-]?key|firebase|client[_-]?secret)[\s:='\"]+[\w\-\.]{8,}" \
-      "$decompiled_dir" > "$REPORT_DIR/${pkg_name}/secrets_raw.txt" || true
+  # Secret Scanning
+  if [ -d "$decompiled_dir" ] && [ -n "$COMBINED_PATTERN" ]; then
+    rg -E -i -H -n --column --no-heading --max-filesize 5M "$COMBINED_PATTERN" "$decompiled_dir" > "$REPORT_DIR/${pkg_name}/secrets_raw.txt" || true
   else
     touch "$REPORT_DIR/${pkg_name}/secrets_raw.txt"
   fi
 
-  # MobSF Static Analysis
-  echo "[*] Running mobsfscan..."
+  # MobSF Scan
   mobsfscan "$decompiled_dir" --json -o "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" || echo "{}" > "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json"
 
-  # Ensure outputs exist even if scan yielded nothing
-  [ -f "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" ] || echo "{}" > "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json"
-  [ -f "$REPORT_DIR/${pkg_name}/secrets_raw.txt" ] || touch "$REPORT_DIR/${pkg_name}/secrets_raw.txt"
+  # Trivy CVE Scan
+  trivy fs "$decompiled_dir" --format json -o "$REPORT_DIR/${pkg_name}/cve_raw.json" || echo '{"Results":[]}' > "$REPORT_DIR/${pkg_name}/cve_raw.json"
 
-  # Encrypt Findings with OpenSSL AES-256-CBC PBKDF2 (100,000 iterations for Web Crypto API compatibility)
-  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
-    -in "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" \
-    -out "$REPORT_DIR/${pkg_name}/mobsfscan.json.enc" \
-    -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A
+  # Extract non-sensitive severity metrics for instant UI chart loading
+  CRIT_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$REPORT_DIR/${pkg_name}/cve_raw.json" 2>/dev/null || echo 0)
+  HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$REPORT_DIR/${pkg_name}/cve_raw.json" 2>/dev/null || echo 0)
+  MED_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$REPORT_DIR/${pkg_name}/cve_raw.json" 2>/dev/null || echo 0)
+  LOW_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length' "$REPORT_DIR/${pkg_name}/cve_raw.json" 2>/dev/null || echo 0)
 
-  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
-    -in "$REPORT_DIR/${pkg_name}/secrets_raw.txt" \
-    -out "$REPORT_DIR/${pkg_name}/secrets.txt.enc" \
-    -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A
+  # Gzip and encrypt output files
+  gzip -c "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" | \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$REPORT_DIR/${pkg_name}/mobsfscan.json.enc" || true
 
-  # Clean Up ephemeral artifacts, APK binary, and decompiled source immediately
-  rm -f "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" "$REPORT_DIR/${pkg_name}/secrets_raw.txt"
-  rm -rf "$decompiled_dir" "$apk_file"
+  gzip -c "$REPORT_DIR/${pkg_name}/secrets_raw.txt" | \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$REPORT_DIR/${pkg_name}/secrets.txt.enc" || true
 
-  # Update JSON Execution Record
-  jq --arg app "$pkg_name" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-     '.history = ([{"package": $app, "timestamp": $time}] + (.history // [] | map(select(.package != $app))))' \
-     "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
+  gzip -c "$REPORT_DIR/${pkg_name}/cve_raw.json" | \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$REPORT_DIR/${pkg_name}/cve.json.enc" || true
 
-  # Commit & Push individual report cleanly with rebase
+  # Cleanup unencrypted assets
+  rm -f "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" "$REPORT_DIR/${pkg_name}/secrets_raw.txt" "$REPORT_DIR/${pkg_name}/cve_raw.json"
+  rm -rf "$decompiled_dir" "$APK_DIR/*"
+
+  # Update history record with cve_summary
+  jq --arg app "$pkg_name" \
+     --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+     --argjson c "$CRIT_COUNT" \
+     --argjson h "$HIGH_COUNT" \
+     --argjson m "$MED_COUNT" \
+     --argjson l "$LOW_COUNT" \
+     '.history = ([{"package": $app, "timestamp": $time, "cve_summary": {"critical": $c, "high": $h, "medium": $m, "low": $l}}] + (.history // [] | map(select(.package != $app))))' \
+     "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE" || true
+
   git add public/
   git commit -m "feat(report): encrypted analysis for $pkg_name [skip ci]" || true
   git pull --rebase origin main || true
@@ -122,8 +126,7 @@ for pkg_name in $PACKAGES; do
   echo "[+] Analysis complete and cleaned for $pkg_name."
 done
 
-# 4. Final Pipeline Execution Status Update
-jq '.status = "Idle" | .current_app = "None"' "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
+jq '.status = "Idle" | .current_app = "None"' "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE" || true
 git add "$STATUS_FILE"
 git commit -m "chore: pipeline batch completed [skip ci]" || true
 git pull --rebase origin main || true
