@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 156,
+  "completed": 172,
   "total": 329,
-  "current_app": "com.microsoft.planner",
+  "current_app": "com.okinc.okex.gp",
   "history": [
+    {
+      "package": "com.okinc.okex.gp",
+      "timestamp": "2026-09-05T06:32:50Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.microsoft.planner",
       "timestamp": "2026-09-05T06:31:16Z",
