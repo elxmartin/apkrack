@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 133,
+  "completed": 149,
   "total": 329,
-  "current_app": "com.keepersecurity.chat",
+  "current_app": "com.mattermost.rn",
   "history": [
+    {
+      "package": "com.mattermost.rn",
+      "timestamp": "2026-09-05T06:30:40Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.keepersecurity.chat",
       "timestamp": "2026-09-05T06:30:04Z",
