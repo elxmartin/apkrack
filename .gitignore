@@ -4,3 +4,4 @@ public/reports/**/*.txt
 
 # Explicitly keep encrypted reports
 !public/reports/**/*.enc
+worker.js

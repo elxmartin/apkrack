@@ -178,9 +178,6 @@ function renderChartJS(labels = [], high = [], medium = [], low = []) {
 }
 
 async function viewReport(packageName, fileName) {
-    const key = getDecryptionKey();
-    if (!key) return;
-
     const modal = document.getElementById('reportModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalBody = document.getElementById('modalBody');
@@ -188,21 +185,27 @@ async function viewReport(packageName, fileName) {
     if (!modal || !modalTitle || !modalBody) return;
 
     modalTitle.textContent = `${packageName} — ${fileName.replace('.enc', '')}`;
-    modalBody.textContent = "Decrypting stream...";
+    modalBody.textContent = "Loading encrypted scan payload...";
     modal.style.display = "block";
 
     try {
-        const reportUrl = `./reports/${packageName}/${fileName}`;
-        const decryptedText = await fetchAndDecryptReport(reportUrl, key);
+        // Request payload through authenticated Cloudflare Worker route
+        const response = await fetch(`/api/report?path=/reports/${packageName}/${fileName}`);
+        
+        if (!response.ok) {
+            throw new Error("Not Allowed: Decryption Not Detected");
+        }
 
+        const dataText = await response.text();
+        
         try {
-            const parsedJson = JSON.parse(decryptedText);
+            const parsedJson = JSON.parse(dataText);
             modalBody.textContent = JSON.stringify(parsedJson, null, 2);
         } catch (e) {
-            modalBody.textContent = decryptedText || "(Empty Report Output)";
+            modalBody.textContent = dataText;
         }
     } catch (err) {
-        modalBody.textContent = "Decryption Failed: " + err.message + "\n\nVerify that your encryption key matches the pipeline configuration.";
+        modalBody.textContent = err.message || "Not Allowed: Decryption Not Detected";
     }
 }
 
