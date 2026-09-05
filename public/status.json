@@ -1,8 +1,8 @@
 {
-  "status": "Analyzing",
-  "completed": 326,
+  "status": "Idle",
+  "completed": 329,
   "total": 329,
-  "current_app": "todolist.scheduleplanner.dailyplanner.todo.reminders",
+  "current_app": "None",
   "history": [
     {
       "package": "todolist.scheduleplanner.dailyplanner.todo.reminders",
