@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 107,
+  "completed": 108,
   "total": 329,
-  "current_app": "com.fluxguide.deutschesmuseum",
+  "current_app": "com.ft.news",
   "history": [
+    {
+      "package": "com.ft.news",
+      "timestamp": "2026-09-05T06:29:02Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.fluxguide.deutschesmuseum",
       "timestamp": "2026-09-05T06:28:59Z",
