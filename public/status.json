@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 18,
+  "completed": 36,
   "total": 329,
-  "current_app": "ch.protonmail.android",
+  "current_app": "com.appgenix.bizcal",
   "history": [
+    {
+      "package": "com.appgenix.bizcal",
+      "timestamp": "2026-09-05T06:21:35Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "ch.protonmail.android",
       "timestamp": "2026-09-05T06:20:56Z",
@@ -23,10 +33,6 @@
         "medium": 0,
         "low": 0
       }
-    },
-    {
-      "package": "com.appgenix.bizcal",
-      "timestamp": "2026-09-03T07:47:37Z"
     },
     {
       "package": "com.auth0.guardian",
