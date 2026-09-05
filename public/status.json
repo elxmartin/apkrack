@@ -1,9 +1,19 @@
 {
   "status": "Analyzing",
-  "completed": 36,
+  "completed": 46,
   "total": 329,
-  "current_app": "com.appgenix.bizcal",
+  "current_app": "com.auth0.guardian",
   "history": [
+    {
+      "package": "com.auth0.guardian",
+      "timestamp": "2026-09-05T06:21:45Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.appgenix.bizcal",
       "timestamp": "2026-09-05T06:21:35Z",
@@ -33,10 +43,6 @@
         "medium": 0,
         "low": 0
       }
-    },
-    {
-      "package": "com.auth0.guardian",
-      "timestamp": "2026-09-03T07:48:57Z"
     }
   ]
 }
