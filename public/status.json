@@ -1,12 +1,18 @@
 {
   "status": "Analyzing",
-  "completed": 48,
-  "total": 333,
-  "current_app": "com.auth0.guardian",
+  "completed": 14,
+  "total": 329,
+  "current_app": "ch.bnb.bnb",
   "history": [
     {
       "package": "ch.bnb.bnb",
-      "timestamp": "2026-09-03T07:42:36Z"
+      "timestamp": "2026-09-05T06:20:43Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
     },
     {
       "package": "ch.protonmail.android",
