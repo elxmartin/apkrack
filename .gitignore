@@ -1,0 +1,6 @@
+# Ignore all plaintext report files inside public/reports
+public/reports/**/*.json
+public/reports/**/*.txt
+
+# Explicitly keep encrypted reports
+!public/reports/**/*.enc
