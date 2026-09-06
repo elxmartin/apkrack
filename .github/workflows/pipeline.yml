@@ -31,11 +31,20 @@ jobs:
           python-version: '3.10'
 
       - name: Cache JADX
-        id: cache-jadx
         uses: actions/cache@v4
         with:
-          path: /usr/local/jadx
+          path: ~/.local/jadx
           key: jadx-1.5.6-v1
+
+      - name: Install JADX
+        run: |
+          if [ ! -d "$HOME/.local/jadx" ]; then
+            mkdir -p $HOME/.local/jadx
+            wget -q https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip
+            unzip -q jadx-1.5.6.zip -d $HOME/.local/jadx
+            rm jadx-1.5.6.zip
+          fi
+          echo "$HOME/.local/jadx/bin" >> $GITHUB_PATH
 
       - name: Cache apkeep
         id: cache-apkeep

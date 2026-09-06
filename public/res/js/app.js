@@ -1,5 +1,6 @@
 let cachedHistory = [];
 let cveChartInstance = null;
+let notifications = [];
 
 /**
  * Utility helper to extract CSS variable values with optional fallbacks
@@ -43,6 +44,34 @@ function getDecryptionKey() {
     return key;
 }
 
+/**
+ * Notification Handlers
+ */
+function addNotification(msg) {
+    const timestamp = new Date().toLocaleTimeString();
+    notifications.unshift(`[${timestamp}] ${msg}`);
+    const badge = document.getElementById("notif-badge");
+    const list = document.getElementById("notif-list");
+    
+    if (badge) {
+        badge.textContent = notifications.length;
+        badge.style.display = notifications.length > 0 ? "inline-block" : "none";
+    }
+    if (list) {
+        list.innerHTML = notifications.map(n => `<li style="padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.05);">${n}</li>`).join("");
+    }
+}
+
+function toggleNotifications() {
+    const dropdown = document.getElementById("notif-dropdown");
+    if (dropdown) {
+        dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+    }
+}
+
+/**
+ * Fetch status and polling
+ */
 async function fetchStatus() {
     try {
         const response = await fetch('./status.json?t=' + Date.now(), { cache: 'no-store' });
@@ -69,6 +98,9 @@ async function fetchStatus() {
     }
 }
 
+/**
+ * Table rendering with Serial #, App Name, and updated Action Buttons
+ */
 function renderTable() {
     const list = document.getElementById('completed-apps');
     if (!list) return;
@@ -78,30 +110,41 @@ function renderTable() {
     const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
 
     const filtered = cachedHistory.filter(item => 
-        !query || (item.package && item.package.toLowerCase().includes(query))
+        !query || 
+        (item.package && item.package.toLowerCase().includes(query)) ||
+        (item.app_name && item.app_name.toLowerCase().includes(query))
     );
 
     if (filtered.length === 0) {
-        list.innerHTML = `<tr><td colspan="3" style="text-align:center; color: var(--text-muted);">No records found.</td></tr>`;
+        list.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No records found.</td></tr>`;
         return;
     }
 
-    filtered.forEach(item => {
+    filtered.forEach((item, index) => {
         const row = document.createElement('tr');
+        const appName = item.app_name || item.package.split('.').pop();
 
         row.innerHTML = `
+            <td style="color: var(--text-muted); text-align: center;">${index + 1}</td>
+            <td style="font-weight: 600; color: var(--text-main);">${appName}</td>
             <td><code>${item.package}</code></td>
             <td style="color: var(--text-muted);">${item.timestamp}</td>
             <td>
                 <div class="report-actions">
                     <button class="report-btn" onclick="viewReport('${item.package}', 'secrets.txt.enc')">Secrets</button>
-                    <button class="report-btn" onclick="viewReport('${item.package}', 'mobsfscan.json.enc')">MobSF Analysis</button>
+                    <button class="report-btn" onclick="viewReport('${item.package}', 'mobsfscan.json.enc')">Static Recon</button>
+                    <button class="report-btn" onclick="viewReport('${item.package}', 'dynamic_recon.json.enc')">Dynamic Recon</button>
                     <button class="report-btn cve" onclick="viewReport('${item.package}', 'cve.json.enc')">Trivy CVE</button>
                 </div>
             </td>
         `;
         list.appendChild(row);
     });
+
+    // Re-initialize SVG icons for newly injected dynamic elements if needed
+    if (window.lucide) {
+        lucide.createIcons();
+    }
 }
 
 /**
@@ -133,7 +176,6 @@ function renderChartJS(labels = [], high = [], medium = [], low = []) {
     const ctx = chartCanvas.getContext('2d');
     if (cveChartInstance) cveChartInstance.destroy();
 
-    // Safely pull CSS colors with cascading fallbacks
     const dangerColor  = getThemeColor('--critical', getThemeColor('--danger', '#ef4444'));
     const warningColor = getThemeColor('--medium', getThemeColor('--warning', '#f59e0b'));
     const accentColor  = getThemeColor('--low', getThemeColor('--accent', '#38bdf8'));
@@ -189,7 +231,6 @@ async function viewReport(packageName, fileName) {
     modal.style.display = "block";
 
     try {
-        // Query the Cloudflare Worker gateway
         const workerUrl = `https://apkrack.locamartin.workers.dev/api/report?package=${encodeURIComponent(packageName)}&file=${encodeURIComponent(fileName)}`;
         const response = await fetch(workerUrl);
 
@@ -209,3 +250,16 @@ async function viewReport(packageName, fileName) {
         modalBody.textContent = err.message || "Not Allowed: Decryption Not Detected";
     }
 }
+
+function closeModal() {
+    const modal = document.getElementById('reportModal');
+    if (modal) modal.style.display = "none";
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    fetchStatus();
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+    setInterval(fetchStatus, 5000); 
+});

@@ -7,12 +7,43 @@
     <link rel="stylesheet" href="./res/css/style.css">
     <!-- Chart.js 4.x CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="./res/js/theme.js"></script>
+    <style>
+        /* Lightweight layout styling for inline SVG alignment */
+        .icon-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+        .icon-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+    </style>
 </head>
 <body>
     <div class="dashboard-container">
-        <header class="top-bar">
+        <!-- Top Bar with SVG Notification Bell -->
+        <header class="top-bar" style="display: flex; justify-content: space-between; align-items: center;">
             <h1 class="brand-title">APKrack</h1>
+            <div class="notification-center" style="position: relative;">
+                <button class="btn icon-btn" onclick="toggleNotifications()">
+                    <i data-lucide="bell"></i>
+                    <span>Notifications</span>
+                    <span id="notif-badge" class="badge badge-idle" style="background:#ef4444; color:#fff; display:none;">0</span>
+                </button>
+                <div id="notif-dropdown" class="modal-content" style="display:none; position:absolute; right:0; top:45px; width:320px; z-index:100; padding:1rem;">
+                    <h4 style="margin-bottom:0.5rem; border-bottom:1px solid var(--border); padding-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem;">
+                        <i data-lucide="bell-ring" style="width:16px; height:16px;"></i> System Notifications
+                    </h4>
+                    <ul id="notif-list" style="list-style:none; max-height:200px; overflow-y:auto; font-size:0.8rem; color:var(--text-muted); padding:0; margin:0;">
+                        <li>No new notifications.</li>
+                    </ul>
+                </div>
+            </div>
         </header>
 
         <!-- Glass Metrics Grid & Analytics -->
@@ -42,9 +73,9 @@
         </section>
 
         <!-- Search Bar Header -->
-        <div class="top-bar" style="margin-top: 1.5rem;">
+        <div class="top-bar" style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
             <h3>Analyzed Applications</h3>
-            <input type="text" id="search" class="search-input" placeholder="Filter by package ID..." oninput="renderTable()">
+            <input type="text" id="search" class="search-input" placeholder="Filter by package ID or App Name..." oninput="renderTable()">
         </div>
 
         <!-- Table View -->
@@ -52,6 +83,8 @@
             <table>
                 <thead>
                     <tr>
+                        <th style="width: 50px; text-align: center;">#</th>
+                        <th>App Name</th>
                         <th>Package ID</th>
                         <th>Timestamp (UTC)</th>
                         <th>Encrypted Scans</th>
@@ -65,9 +98,11 @@
     <!-- Decrypted Output Modal -->
     <div id="reportModal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h3 id="modalTitle">Report Inspection</h3>
-                <button class="close-btn" onclick="closeModal()">&times;</button>
+                <button class="close-btn" onclick="closeModal()" style="background:none; border:none; color:var(--text-main); cursor:pointer;">
+                    <i data-lucide="x"></i>
+                </button>
             </div>
             <pre id="modalBody">Processing payload...</pre>
         </div>
