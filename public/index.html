@@ -5,46 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>APKrack Security Engine Dashboard</title>
     <link rel="stylesheet" href="./res/css/style.css">
-    <!-- Chart.js 4.x CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Lucide Icons CDN -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Google Identity Services (GIS) API -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="./res/js/theme.js"></script>
-    <style>
-        .icon-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-        }
-        .icon-btn svg {
-            width: 18px;
-            height: 18px;
-        }
-        .controls-group {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-    </style>
 </head>
 <body>
-    <div class="dashboard-container">
-        <!-- Top Bar with Google Auth and Key Controls -->
+
+    <!-- Mandatory Full-Screen Login Gatekeeper -->
+    <div id="login-overlay" style="position: fixed; inset: 0; z-index: 9999; background: #090d16; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div style="text-align: center; max-width: 420px; width: 90%; padding: 2.5rem; background: rgba(15, 23, 42, 0.95); border-radius: 12px; border: 1px solid rgba(51, 65, 85, 0.6); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
+            <h1 style="color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.5rem; font-weight: 700;">APKrack Security Engine</h1>
+            <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 2rem; line-height: 1.5;">Authentication required. Please sign in with an authorized Google account to view security scans.</p>
+            
+            <div id="g_id_onload"
+                data-client_id="7346060566-pn1m675tet9risodlnbl9dpr5ut5mr18.apps.googleusercontent.com"
+                data-callback="handleCredentialResponse"
+                data-auto_prompt="false">
+            </div>
+            <div style="display: flex; justify-content: center;">
+                <div class="g_id_signin" data-type="standard" data-theme="dark" data-size="large" data-shape="rectangular"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Protected Application Dashboard Container -->
+    <div id="dashboard-app" class="dashboard-container" style="display: none;">
         <header class="top-bar">
             <h1 class="brand-title">APKrack</h1>
 
             <div class="controls-group">
-                <!-- Google Sign-In Container -->
-                <div id="g_id_onload"
-                    data-client_id="7346060566-pn1m675tet9risodlnbl9dpr5ut5mr18.apps.googleusercontent.com"
-                    data-callback="handleCredentialResponse">
-                </div>
-                <div class="g_id_signin" data-type="standard" data-theme="dark" data-size="medium"></div>
-
-                <!-- Encryption Key Controls -->
                 <button class="btn icon-btn" onclick="setEncryptionKey()">
                     <i data-lucide="key"></i>
                     <span id="key-indicator">Key: Unset</span>
@@ -52,8 +42,10 @@
                 <button class="btn icon-btn" onclick="clearKey()">
                     <i data-lucide="trash-2"></i>
                 </button>
+                <button class="btn icon-btn" style="border-color: #ef4444; color: #ef4444;" onclick="logoutSession()">
+                    <i data-lucide="log-out"></i> Logout
+                </button>
 
-                <!-- Notifications Center -->
                 <div class="notification-center" style="position: relative;">
                     <button class="btn icon-btn" onclick="toggleNotifications()">
                         <i data-lucide="bell"></i>
@@ -71,7 +63,6 @@
             </div>
         </header>
 
-        <!-- Glass Metrics Grid -->
         <section class="card-grid">
             <div class="metric-card">
                 <span class="metric-label">Engine Status</span>
@@ -87,7 +78,6 @@
             </div>
         </section>
 
-        <!-- CVE Breakdown Chart Section -->
         <section class="chart-card">
             <div class="chart-header">
                 <h3>Vulnerability Overview (CVE Breakdown)</h3>
@@ -97,13 +87,11 @@
             </div>
         </section>
 
-        <!-- Search Bar Header -->
         <div class="top-bar" style="margin-top: 1.5rem;">
             <h3>Analyzed Applications</h3>
             <input type="text" id="search" class="search-input" placeholder="Filter by package ID or App Name..." oninput="renderTable()">
         </div>
 
-        <!-- Table View -->
         <div class="table-container">
             <table>
                 <thead>
@@ -120,7 +108,6 @@
         </div>
     </div>
 
-    <!-- Decrypted Output Modal -->
     <div id="reportModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">

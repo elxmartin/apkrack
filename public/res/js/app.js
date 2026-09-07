@@ -3,23 +3,43 @@ let cveChartInstance = null;
 let notifications = [];
 
 /**
- * Handle Google OAuth Callback Response
+ * Handle Google OAuth Callback Response & Gatekeeper
  */
 function handleCredentialResponse(response) {
     if (response && response.credential) {
         sessionStorage.setItem("GOOGLE_ID_TOKEN", response.credential);
         addNotification("Google Authentication Successful.");
+        checkAuthentication();
     }
 }
 
 /**
- * Key and Theme Utility Helpers
+ * Enforces mandatory login screen before displaying dashboard
  */
-function getThemeColor(varName, fallback) {
-    const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-    return val || fallback;
+function checkAuthentication() {
+    const token = sessionStorage.getItem("GOOGLE_ID_TOKEN");
+    const overlay = document.getElementById("login-overlay");
+    const app = document.getElementById("dashboard-app");
+
+    if (token) {
+        if (overlay) overlay.style.display = "none";
+        if (app) app.style.display = "block";
+        fetchStatus();
+    } else {
+        if (overlay) overlay.style.display = "flex";
+        if (app) app.style.display = "none";
+    }
 }
 
+function logoutSession() {
+    sessionStorage.removeItem("GOOGLE_ID_TOKEN");
+    sessionStorage.removeItem("REPORT_ENCRYPTION_KEY");
+    window.location.reload();
+}
+
+/**
+ * Key Utility Helpers
+ */
 function updateKeyIndicator() {
     const hasKey = !!sessionStorage.getItem("REPORT_ENCRYPTION_KEY");
     const indicator = document.getElementById("key-indicator");
@@ -54,9 +74,6 @@ function getDecryptionKey() {
     return key;
 }
 
-/**
- * Format raw reverse-domain package names into readable App Title fallbacks
- */
 function formatAppName(pkg) {
     if (!pkg) return "Unknown";
     const segments = pkg.split('.').filter(s => !['com', 'org', 'net', 'io', 'ch', 'nl', 'gp', 'twa'].includes(s.toLowerCase()));
@@ -64,9 +81,6 @@ function formatAppName(pkg) {
     return targetSegment.charAt(0).toUpperCase() + targetSegment.slice(1);
 }
 
-/**
- * Notification Handlers
- */
 function addNotification(msg) {
     const timestamp = new Date().toLocaleTimeString();
     notifications.unshift(`[${timestamp}] ${msg}`);
@@ -89,9 +103,6 @@ function toggleNotifications() {
     }
 }
 
-/**
- * Fetch Status Polling
- */
 async function fetchStatus() {
     try {
         const response = await fetch('./status.json?t=' + Date.now(), { cache: 'no-store' });
@@ -118,9 +129,6 @@ async function fetchStatus() {
     }
 }
 
-/**
- * Table Rendering (Dynamic Recon button removed, title formatting applied)
- */
 function renderTable() {
     const list = document.getElementById('completed-apps');
     if (!list) return;
@@ -166,9 +174,6 @@ function renderTable() {
     }
 }
 
-/**
- * Chart.js Visualization
- */
 function updateCveChart() {
     const labels = [];
     const highCounts = [];
@@ -195,21 +200,14 @@ function renderChartJS(labels = [], high = [], medium = [], low = []) {
     const ctx = chartCanvas.getContext('2d');
     if (cveChartInstance) cveChartInstance.destroy();
 
-    const dangerColor  = getThemeColor('--critical', getThemeColor('--danger', '#ef4444'));
-    const warningColor = getThemeColor('--medium', getThemeColor('--warning', '#f59e0b'));
-    const accentColor  = getThemeColor('--low', getThemeColor('--accent', '#38bdf8'));
-    const textMainColor  = getThemeColor('--text-main', '#f8fafc');
-    const textMutedColor = getThemeColor('--text-muted', '#94a3b8');
-    const borderColor   = getThemeColor('--border', 'rgba(51, 65, 85, 0.6)');
-
     cveChartInstance = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels.length > 0 ? labels : ['No Data'],
             datasets: [
-                { label: 'High / Critical', data: high, backgroundColor: dangerColor, borderRadius: 4 },
-                { label: 'Medium', data: medium, backgroundColor: warningColor, borderRadius: 4 },
-                { label: 'Low', data: low, backgroundColor: accentColor, borderRadius: 4 }
+                { label: 'High / Critical', data: high, backgroundColor: '#ef4444', borderRadius: 4 },
+                { label: 'Medium', data: medium, backgroundColor: '#f59e0b', borderRadius: 4 },
+                { label: 'Low', data: low, backgroundColor: '#38bdf8', borderRadius: 4 }
             ]
         },
         options: {
@@ -217,19 +215,16 @@ function renderChartJS(labels = [], high = [], medium = [], low = []) {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                x: { stacked: true, grid: { color: borderColor }, ticks: { color: textMutedColor } },
-                y: { stacked: true, grid: { display: false }, ticks: { color: textMainColor } }
+                x: { stacked: true, grid: { color: 'rgba(51, 65, 85, 0.6)' }, ticks: { color: '#94a3b8' } },
+                y: { stacked: true, grid: { display: false }, ticks: { color: '#f8fafc' } }
             },
             plugins: {
-                legend: { position: 'top', labels: { color: textMainColor, font: { family: 'Inter' } } }
+                legend: { position: 'top', labels: { color: '#f8fafc' } }
             }
         }
     });
 }
 
-/**
- * Report Inspection & Client-Side Decryption Pipeline Integration
- */
 async function viewReport(packageName, fileName) {
     const modal = document.getElementById('reportModal');
     const modalTitle = document.getElementById('modalTitle');
@@ -266,7 +261,6 @@ async function viewReport(packageName, fileName) {
         const encryptedBase64 = await response.text();
         modalBody.textContent = "Decrypting payload client-side...";
 
-        // Execute AES-256-CBC PBKDF2 Gzip decryption from crypto.js
         const decryptedText = await decryptRawPayload(encryptedBase64, passKey);
 
         try {
@@ -286,10 +280,14 @@ function closeModal() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    checkAuthentication();
     updateKeyIndicator();
-    fetchStatus();
     if (window.lucide) {
         lucide.createIcons();
     }
-    setInterval(fetchStatus, 5000); 
+    setInterval(() => {
+        if (sessionStorage.getItem("GOOGLE_ID_TOKEN")) {
+            fetchStatus();
+        }
+    }, 5000); 
 });
