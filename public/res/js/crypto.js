@@ -1,13 +1,7 @@
 /**
- * Decrypts OpenSSL AES-256-CBC encrypted, Gzip-compressed base64 payloads
+ * Decrypts raw OpenSSL AES-256-CBC encrypted, Gzip-compressed Base64 payloads directly
  */
-async function fetchAndDecryptReport(reportUrl, passphrase) {
-    const response = await fetch(`${reportUrl}?t=${Date.now()}`, { cache: 'no-store' });
-    if (!response.ok) {
-        throw new Error(`Report binary not found (${response.status} ${response.statusText}).`);
-    }
-
-    const base64Str = await response.text();
+async function decryptRawPayload(base64Str, passphrase) {
     const cleanBase64 = base64Str.replace(/\s+/g, '');
 
     let rawBinary;
@@ -73,14 +67,26 @@ async function fetchAndDecryptReport(reportUrl, passphrase) {
         throw new Error("Decryption failed. Invalid passphrase or corrupted data.");
     }
 
-    // Decompress Gzip Stream safely using Response stream wrapping
+    // Decompress Gzip Stream safely
     try {
         const gzipBlob = new Blob([decryptedGzipBuffer]);
         const decompressedStream = gzipBlob.stream().pipeThrough(new DecompressionStream('gzip'));
         const decompressedBuffer = await new Response(decompressedStream).arrayBuffer();
         return new TextDecoder().decode(decompressedBuffer);
     } catch (gzipErr) {
-        // Fallback for raw text uncompressed payloads
         return new TextDecoder().decode(decryptedGzipBuffer);
     }
+}
+
+/**
+ * Fetch and decrypt helper wrapper
+ */
+async function fetchAndDecryptReport(reportUrl, passphrase) {
+    const response = await fetch(`${reportUrl}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!response.ok) {
+        throw new Error(`Report binary not found (${response.status} ${response.statusText}).`);
+    }
+
+    const base64Str = await response.text();
+    return await decryptRawPayload(base64Str, passphrase);
 }

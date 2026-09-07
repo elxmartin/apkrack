@@ -3,7 +3,17 @@ let cveChartInstance = null;
 let notifications = [];
 
 /**
- * Utility helper to extract CSS variable values with optional fallbacks
+ * Handle Google OAuth Callback Response
+ */
+function handleCredentialResponse(response) {
+    if (response && response.credential) {
+        sessionStorage.setItem("GOOGLE_ID_TOKEN", response.credential);
+        addNotification("Google Authentication Successful.");
+    }
+}
+
+/**
+ * Key and Theme Utility Helpers
  */
 function getThemeColor(varName, fallback) {
     const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
@@ -45,6 +55,16 @@ function getDecryptionKey() {
 }
 
 /**
+ * Format raw reverse-domain package names into readable App Title fallbacks
+ */
+function formatAppName(pkg) {
+    if (!pkg) return "Unknown";
+    const segments = pkg.split('.').filter(s => !['com', 'org', 'net', 'io', 'ch', 'nl', 'gp', 'twa'].includes(s.toLowerCase()));
+    const targetSegment = segments.length > 0 ? segments[0] : pkg.split('.').pop();
+    return targetSegment.charAt(0).toUpperCase() + targetSegment.slice(1);
+}
+
+/**
  * Notification Handlers
  */
 function addNotification(msg) {
@@ -70,7 +90,7 @@ function toggleNotifications() {
 }
 
 /**
- * Fetch status and polling
+ * Fetch Status Polling
  */
 async function fetchStatus() {
     try {
@@ -99,7 +119,7 @@ async function fetchStatus() {
 }
 
 /**
- * Table rendering with Serial #, App Name, and updated Action Buttons
+ * Table Rendering (Dynamic Recon button removed, title formatting applied)
  */
 function renderTable() {
     const list = document.getElementById('completed-apps');
@@ -109,11 +129,12 @@ function renderTable() {
     const searchInput = document.getElementById('search');
     const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
 
-    const filtered = cachedHistory.filter(item => 
-        !query || 
-        (item.package && item.package.toLowerCase().includes(query)) ||
-        (item.app_name && item.app_name.toLowerCase().includes(query))
-    );
+    const filtered = cachedHistory.filter(item => {
+        const name = item.app_name || formatAppName(item.package);
+        return !query || 
+            (item.package && item.package.toLowerCase().includes(query)) ||
+            (name && name.toLowerCase().includes(query));
+    });
 
     if (filtered.length === 0) {
         list.innerHTML = `<tr><td colspan="5" style="text-align:center; color: var(--text-muted);">No records found.</td></tr>`;
@@ -122,7 +143,7 @@ function renderTable() {
 
     filtered.forEach((item, index) => {
         const row = document.createElement('tr');
-        const appName = item.app_name || item.package.split('.').pop();
+        const appName = item.app_name || formatAppName(item.package);
 
         row.innerHTML = `
             <td style="color: var(--text-muted); text-align: center;">${index + 1}</td>
@@ -133,7 +154,6 @@ function renderTable() {
                 <div class="report-actions">
                     <button class="report-btn" onclick="viewReport('${item.package}', 'secrets.txt.enc')">Secrets</button>
                     <button class="report-btn" onclick="viewReport('${item.package}', 'mobsfscan.json.enc')">Static Recon</button>
-                    <button class="report-btn" onclick="viewReport('${item.package}', 'dynamic_recon.json.enc')">Dynamic Recon</button>
                     <button class="report-btn cve" onclick="viewReport('${item.package}', 'cve.json.enc')">Trivy CVE</button>
                 </div>
             </td>
@@ -141,14 +161,13 @@ function renderTable() {
         list.appendChild(row);
     });
 
-    // Re-initialize SVG icons for newly injected dynamic elements if needed
     if (window.lucide) {
         lucide.createIcons();
     }
 }
 
 /**
- * Instant Chart.js Render using cve_summary metrics from status.json
+ * Chart.js Visualization
  */
 function updateCveChart() {
     const labels = [];
@@ -198,27 +217,19 @@ function renderChartJS(labels = [], high = [], medium = [], low = []) {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                x: { 
-                    stacked: true, 
-                    grid: { color: borderColor }, 
-                    ticks: { color: textMutedColor } 
-                },
-                y: { 
-                    stacked: true, 
-                    grid: { display: false }, 
-                    ticks: { color: textMainColor } 
-                }
+                x: { stacked: true, grid: { color: borderColor }, ticks: { color: textMutedColor } },
+                y: { stacked: true, grid: { display: false }, ticks: { color: textMainColor } }
             },
             plugins: {
-                legend: { 
-                    position: 'top', 
-                    labels: { color: textMainColor, font: { family: 'Inter' } } 
-                }
+                legend: { position: 'top', labels: { color: textMainColor, font: { family: 'Inter' } } }
             }
         }
     });
 }
 
+/**
+ * Report Inspection & Client-Side Decryption Pipeline Integration
+ */
 async function viewReport(packageName, fileName) {
     const modal = document.getElementById('reportModal');
     const modalTitle = document.getElementById('modalTitle');
@@ -226,28 +237,46 @@ async function viewReport(packageName, fileName) {
 
     if (!modal || !modalTitle || !modalBody) return;
 
+    const passKey = getDecryptionKey();
+    if (!passKey) {
+        alert("Decryption passphrase is required to view encrypted reports.");
+        return;
+    }
+
     modalTitle.textContent = `${packageName} — ${fileName.replace('.enc', '')}`;
-    modalBody.textContent = "Loading report...";
+    modalBody.textContent = "Authenticating & Fetching report payload...";
     modal.style.display = "block";
 
     try {
+        const googleToken = sessionStorage.getItem("GOOGLE_ID_TOKEN");
         const workerUrl = `https://apkrack.locamartin.workers.dev/api/report?package=${encodeURIComponent(packageName)}&file=${encodeURIComponent(fileName)}`;
-        const response = await fetch(workerUrl);
+        
+        const headers = {};
+        if (googleToken) {
+            headers["Authorization"] = `Bearer ${googleToken}`;
+        }
+
+        const response = await fetch(workerUrl, { headers });
 
         if (!response.ok) {
-            throw new Error("Not Allowed: Decryption Not Detected");
+            const errText = await response.text();
+            throw new Error(`Worker Error (${response.status}): ${errText}`);
         }
 
-        const dataText = await response.text();
+        const encryptedBase64 = await response.text();
+        modalBody.textContent = "Decrypting payload client-side...";
+
+        // Execute AES-256-CBC PBKDF2 Gzip decryption from crypto.js
+        const decryptedText = await decryptRawPayload(encryptedBase64, passKey);
 
         try {
-            const parsedJson = JSON.parse(dataText);
+            const parsedJson = JSON.parse(decryptedText);
             modalBody.textContent = JSON.stringify(parsedJson, null, 2);
         } catch (e) {
-            modalBody.textContent = dataText;
+            modalBody.textContent = decryptedText;
         }
     } catch (err) {
-        modalBody.textContent = err.message || "Not Allowed: Decryption Not Detected";
+        modalBody.textContent = err.message || "Decryption failed or access denied.";
     }
 }
 
@@ -257,6 +286,7 @@ function closeModal() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    updateKeyIndicator();
     fetchStatus();
     if (window.lucide) {
         lucide.createIcons();

@@ -42,6 +42,24 @@ if [ ! -f "$STATUS_FILE" ]; then
   echo '{"status": "Initializing", "completed": 0, "total": 0, "current_app": "None", "history": []}' > "$STATUS_FILE"
 fi
 
+# Helper function to extract a human-readable title fallback from package name
+format_app_name() {
+  local pkg="$1"
+  local clean_name
+  clean_name=$(echo "$pkg" | awk -F'.' '{
+    for(i=1; i<=NF; i++) {
+      if ($i !~ /^(com|org|net|io|ch|nl|gp|twa)$/i) {
+        print $i;
+        exit;
+      }
+    }
+  }')
+  if [ -z "$clean_name" ]; then
+    clean_name=$(echo "$pkg" | awk -F'.' '{print $NF}')
+  fi
+  echo "$(tr '[:lower:]' '[:upper:]' <<< "${clean_name:0:1}")${clean_name:1}"
+}
+
 echo "[+] Starting processing loop for $TOTAL targets..."
 for pkg_name in $PACKAGES; do
   [ -z "$pkg_name" ] && continue
@@ -68,6 +86,9 @@ for pkg_name in $PACKAGES; do
     rm -rf "$APK_DIR/*" || true
     continue
   fi
+
+  # Derive App Name
+  APP_TITLE=$(format_app_name "$pkg_name")
 
   decompiled_dir="$WORKDIR/decompiled_${pkg_name}"
   mkdir -p "$REPORT_DIR/${pkg_name}"
@@ -108,14 +129,15 @@ for pkg_name in $PACKAGES; do
   rm -f "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" "$REPORT_DIR/${pkg_name}/secrets_raw.txt" "$REPORT_DIR/${pkg_name}/cve_raw.json"
   rm -rf "$decompiled_dir" "$APK_DIR/*"
 
-  # Update history record with cve_summary
+  # Update history record with app_name and cve_summary
   jq --arg app "$pkg_name" \
+     --arg app_title "$APP_TITLE" \
      --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
      --argjson c "$CRIT_COUNT" \
      --argjson h "$HIGH_COUNT" \
      --argjson m "$MED_COUNT" \
      --argjson l "$LOW_COUNT" \
-     '.history = ([{"package": $app, "timestamp": $time, "cve_summary": {"critical": $c, "high": $h, "medium": $m, "low": $l}}] + (.history // [] | map(select(.package != $app))))' \
+     '.history = ([{"package": $app, "app_name": $app_title, "timestamp": $time, "cve_summary": {"critical": $c, "high": $h, "medium": $m, "low": $l}}] + (.history // [] | map(select(.package != $app))))' \
      "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE" || true
 
   git add public/
