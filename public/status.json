@@ -1,9 +1,20 @@
 {
   "status": "Analyzing",
-  "completed": 27,
+  "completed": 37,
   "total": 340,
-  "current_app": "ch.ringier.illustre",
+  "current_app": "com.aionav.apps.schweizergardeMuseumNaters",
   "history": [
+    {
+      "package": "com.aionav.apps.schweizergardeMuseumNaters",
+      "app_name": "Com",
+      "timestamp": "2026-09-15T02:56:12Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "ch.ringier.illustre",
       "app_name": "Ch",
