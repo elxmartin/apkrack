@@ -1,9 +1,20 @@
 {
   "status": "Analyzing",
-  "completed": 37,
+  "completed": 39,
   "total": 340,
-  "current_app": "com.aionav.apps.schweizergardeMuseumNaters",
+  "current_app": "com.alarm.alarmmobile.android",
   "history": [
+    {
+      "package": "com.alarm.alarmmobile.android",
+      "app_name": "Com",
+      "timestamp": "2026-09-15T02:56:35Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.aionav.apps.schweizergardeMuseumNaters",
       "app_name": "Com",
