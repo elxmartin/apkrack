@@ -1,9 +1,20 @@
 {
   "status": "Analyzing",
-  "completed": 39,
+  "completed": 41,
   "total": 340,
-  "current_app": "com.alarm.alarmmobile.android",
+  "current_app": "com.allegion.leopard",
   "history": [
+    {
+      "package": "com.allegion.leopard",
+      "app_name": "Com",
+      "timestamp": "2026-09-15T02:57:22Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.alarm.alarmmobile.android",
       "app_name": "Com",
