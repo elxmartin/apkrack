@@ -1,9 +1,20 @@
 {
   "status": "Analyzing",
-  "completed": 216,
+  "completed": 300,
   "total": 340,
-  "current_app": "com.punchh.moes",
+  "current_app": "de.bayerischerund.areader",
   "history": [
+    {
+      "package": "de.bayerischerund.areader",
+      "app_name": "De",
+      "timestamp": "2026-09-15T03:56:35Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "com.punchh.moes",
       "app_name": "Com",
