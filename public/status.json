@@ -1,9 +1,20 @@
 {
-  "status": "Idle",
-  "completed": 323,
-  "total": 323,
-  "current_app": "None",
+  "status": "Analyzing",
+  "completed": 20,
+  "total": 340,
+  "current_app": "ch.delen.digital",
   "history": [
+    {
+      "package": "ch.delen.digital",
+      "app_name": "Ch",
+      "timestamp": "2026-09-15T02:50:53Z",
+      "cve_summary": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      }
+    },
     {
       "package": "todolist.scheduleplanner.dailyplanner.todo.reminders",
       "timestamp": "2026-09-05T06:40:32Z",
