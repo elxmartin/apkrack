@@ -1,8 +1,8 @@
 {
-  "status": "Analyzing",
-  "completed": 301,
+  "status": "Idle",
+  "completed": 340,
   "total": 340,
-  "current_app": "de.boersefrankfurt.xetra",
+  "current_app": "None",
   "history": [
     {
       "package": "de.boersefrankfurt.xetra",
