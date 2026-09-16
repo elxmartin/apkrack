@@ -10,3 +10,4 @@ public/reports/**/*.txt
 # Ephemeral decrypted pipeline state; it must never be committed.
 .pipeline-status.json
 .dev.vars*
+.wrangler/
