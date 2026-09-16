@@ -24,8 +24,17 @@ async function submitLogin(event) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
         });
-        if (!response.ok) throw new Error('Invalid credentials.');
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const message = result.error === 'username_invalid'
+                ? 'Username is incorrect.'
+                : result.error === 'password_invalid'
+                    ? 'Password is incorrect.'
+                    : result.error === 'password_verifier_invalid'
+                        ? 'Password verifier configuration is invalid.'
+                    : 'Unable to sign in. Please try again.';
+            throw new Error(message);
+        }
         if (!result.token) throw new Error('Unable to start a session.');
         sessionStorage.setItem(SESSION_TOKEN_KEY, result.token);
         document.getElementById('password').value = '';
@@ -159,12 +168,27 @@ async function fetchStatus() {
         if (progressEl) progressEl.textContent = `${data.completed || 0} / ${data.total || 0}`;
 
         cachedHistory = Array.isArray(data.history) ? data.history : [];
+        updateRiskMetrics();
         renderTable();
         updateCveChart();
     } catch (e) {
         console.error("Dashboard polling error:", e);
         if (e.message.includes('401') || e.message.includes('403')) logoutSession();
     }
+}
+
+function updateRiskMetrics() {
+    let elevated = 0;
+    let moderate = 0;
+    cachedHistory.forEach(item => {
+        const summary = item.cve_summary || {};
+        elevated += (summary.critical || 0) + (summary.high || 0);
+        moderate += summary.medium || 0;
+    });
+    const elevatedEl = document.getElementById('elevated-risks');
+    const moderateEl = document.getElementById('moderate-risks');
+    if (elevatedEl) elevatedEl.textContent = elevated;
+    if (moderateEl) moderateEl.textContent = moderate;
 }
 
 function renderTable() {

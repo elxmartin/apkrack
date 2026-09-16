@@ -39,6 +39,10 @@ async function handleLogin(request, env, headers) {
     console.error('Required authentication secrets are not configured.');
     return textResponse('Service unavailable', 503, headers);
   }
+  if (!isValidPasswordVerifier(env.DASHBOARD_PASSWORD_HASH)) {
+    console.error(JSON.stringify({ message: 'Invalid DASHBOARD_PASSWORD_HASH format.' }));
+    return jsonResponse({ error: 'password_verifier_invalid' }, 503, headers);
+  }
 
   let credentials;
   try {
@@ -51,7 +55,10 @@ async function handleLogin(request, env, headers) {
   const password = typeof credentials.password === 'string' ? credentials.password : '';
   const validUsername = await timingSafeEqual(username, env.DASHBOARD_USERNAME);
   const validPassword = await verifyPassword(password, env.DASHBOARD_PASSWORD_HASH);
-  if (!validUsername || !validPassword) return textResponse('Invalid credentials', 401, headers);
+  // Evaluate both checks before returning so an invalid username does not make the
+  // password verification path observable through response timing.
+  if (!validUsername) return jsonResponse({ error: 'username_invalid' }, 401, headers);
+  if (!validPassword) return jsonResponse({ error: 'password_invalid' }, 401, headers);
 
   const now = Math.floor(Date.now() / 1000);
   const token = await signSession({ iat: now, exp: now + TOKEN_TTL_SECONDS }, env.AUTH_SESSION_SECRET);
@@ -96,7 +103,21 @@ async function verifyPassword(password, storedHash) {
     const bits = await crypto.subtle.deriveBits(
       { name: 'PBKDF2', hash: 'SHA-256', salt: fromBase64(parts[2]), iterations }, key, 256
     );
-    return timingSafeEqualBytes(new Uint8Array(bits), fromBase64(parts[3]));
+    return await timingSafeEqualBytes(new Uint8Array(bits), fromBase64(parts[3]));
+  } catch {
+    return false;
+  }
+}
+
+function isValidPasswordVerifier(storedHash) {
+  const parts = storedHash.split('$');
+  if (parts.length !== 4 || parts[0] !== 'pbkdf2-sha256' || !/^\d+$/.test(parts[1])) return false;
+  const iterations = Number(parts[1]);
+  if (iterations < 100000 || iterations > 1000000) return false;
+  try {
+    const salt = fromBase64(parts[2]);
+    const derivedKey = fromBase64(parts[3]);
+    return salt.length >= 16 && derivedKey.length === 32;
   } catch {
     return false;
   }
@@ -112,7 +133,7 @@ async function verifySession(token, secret) {
   const [encodedPayload, encodedSignature, ...extra] = token.split('.');
   if (!encodedPayload || !encodedSignature || extra.length) return false;
   const expected = await hmac(encodedPayload, secret);
-  if (!timingSafeEqualBytes(expected, fromBase64Url(encodedSignature))) return false;
+  if (!await timingSafeEqualBytes(expected, fromBase64Url(encodedSignature))) return false;
   try {
     const payload = JSON.parse(decoder.decode(fromBase64Url(encodedPayload)));
     return Number.isSafeInteger(payload.iat) && Number.isSafeInteger(payload.exp) ? payload : false;
@@ -130,11 +151,12 @@ async function timingSafeEqual(value, expected) {
   return timingSafeEqualBytes(encoder.encode(value), encoder.encode(expected));
 }
 
-function timingSafeEqualBytes(left, right) {
-  const maxLength = Math.max(left.length, right.length);
-  let difference = left.length ^ right.length;
-  for (let i = 0; i < maxLength; i++) difference |= (left[i % left.length] || 0) ^ (right[i % right.length] || 0);
-  return difference === 0;
+async function timingSafeEqualBytes(left, right) {
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', left),
+    crypto.subtle.digest('SHA-256', right)
+  ]);
+  return crypto.subtle.timingSafeEqual(leftHash, rightHash);
 }
 
 function responseHeaders(request, env) {
