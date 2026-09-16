@@ -4,4 +4,9 @@ public/reports/**/*.txt
 
 # Explicitly keep encrypted reports
 !public/reports/**/*.enc
-worker.js
+# The access Worker is source code and must be version controlled.
+!worker.js
+
+# Ephemeral decrypted pipeline state; it must never be committed.
+.pipeline-status.json
+.dev.vars*

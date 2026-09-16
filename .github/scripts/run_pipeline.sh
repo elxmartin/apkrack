@@ -4,7 +4,9 @@ set -o pipefail
 WORKDIR="$(pwd)"
 APK_DIR="$WORKDIR/apks"
 REPORT_DIR="$WORKDIR/public/reports"
-STATUS_FILE="$WORKDIR/public/status.json"
+STATUS_FILE="$WORKDIR/.pipeline-status.json"
+PUBLIC_STATUS_FILE="$WORKDIR/public/status.enc"
+LEGACY_STATUS_FILE="$WORKDIR/public/status.json"
 CONFIG_FILE="$WORKDIR/.github/config/rules.yml"
 
 mkdir -p "$APK_DIR" "$REPORT_DIR"
@@ -14,6 +16,57 @@ if [ -z "$REPORT_ENCRYPTION_KEY" ]; then
   echo "[-] ERROR: REPORT_ENCRYPTION_KEY environment variable is not set."
   exit 1
 fi
+
+cleanup_pipeline_state() {
+  rm -f "$STATUS_FILE"
+}
+trap cleanup_pipeline_state EXIT
+
+encrypt_status() {
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+    -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -in "$STATUS_FILE" -out "$PUBLIC_STATUS_FILE"
+  # The old public JSON file contains target names and must never be deployed again.
+  rm -f "$LEGACY_STATUS_FILE"
+}
+
+report_id_for() {
+  local package_name="$1"
+  printf '%s' "workspace-report-id-v1:${package_name}" | \
+    openssl dgst -sha256 -hmac "$REPORT_ENCRYPTION_KEY" -hex | awk '{print $NF}'
+}
+
+initialise_status() {
+  if [ -f "$PUBLIC_STATUS_FILE" ]; then
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+      -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -in "$PUBLIC_STATUS_FILE" -out "$STATUS_FILE"
+  elif [ -f "$LEGACY_STATUS_FILE" ]; then
+    # One-time migration from the legacy public metadata file.
+    cp "$LEGACY_STATUS_FILE" "$STATUS_FILE"
+  else
+    printf '%s\n' '{"status":"Initializing","completed":0,"total":0,"current_app":"None","history":[]}' > "$STATUS_FILE"
+  fi
+}
+
+migrate_legacy_report_paths() {
+  # Package names used to be public directory names. Replace each with an HMAC-derived,
+  # opaque identifier before the next deployment.
+  find "$REPORT_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | while IFS= read -r legacy_name; do
+    [[ "$legacy_name" =~ ^[a-f0-9]{64}$ ]] && continue
+    local_id=$(report_id_for "$legacy_name")
+    if [ ! -e "$REPORT_DIR/$local_id" ]; then
+      mv "$REPORT_DIR/$legacy_name" "$REPORT_DIR/$local_id"
+    fi
+  done
+
+  local package_name report_id
+  while IFS= read -r package_name; do
+    [ -z "$package_name" ] && continue
+    report_id=$(report_id_for "$package_name")
+    jq --arg pkg "$package_name" --arg id "$report_id" \
+      '.history |= map(if .package == $pkg then .report_id = $id else . end)' \
+      "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE"
+  done < <(jq -r '.history[]?.package // empty' "$STATUS_FILE")
+}
 
 # Configure Git Bot Identity
 git config user.name "github-actions[bot]"
@@ -38,9 +91,9 @@ PACKAGES=$(cat extracted_apps.txt)
 TOTAL=$(echo "$PACKAGES" | grep -c '.' || true)
 CURRENT_COUNT=0
 
-if [ ! -f "$STATUS_FILE" ]; then
-  echo '{"status": "Initializing", "completed": 0, "total": 0, "current_app": "None", "history": []}' > "$STATUS_FILE"
-fi
+initialise_status
+migrate_legacy_report_paths
+encrypt_status
 
 # Helper function to extract a human-readable title fallback from package name
 format_app_name() {
@@ -65,7 +118,10 @@ for pkg_name in $PACKAGES; do
   [ -z "$pkg_name" ] && continue
   ((CURRENT_COUNT++))
 
-  if [ -f "$REPORT_DIR/${pkg_name}/mobsfscan.json.enc" ] && [ -f "$REPORT_DIR/${pkg_name}/secrets.txt.enc" ] && [ -f "$REPORT_DIR/${pkg_name}/cve.json.enc" ]; then
+  report_id=$(report_id_for "$pkg_name")
+  report_path="$REPORT_DIR/$report_id"
+
+  if [ -f "$report_path/mobsfscan.json.enc" ] && [ -f "$report_path/secrets.txt.enc" ] && [ -f "$report_path/cve.json.enc" ]; then
     echo "[*] ($CURRENT_COUNT/$TOTAL) Skipped (already analyzed): $pkg_name"
     continue
   fi
@@ -77,6 +133,7 @@ for pkg_name in $PACKAGES; do
   jq --arg app "$pkg_name" --argjson cur "$CURRENT_COUNT" --argjson tot "$TOTAL" \
      '.status = "Analyzing" | .current_app = $app | .completed = $cur | .total = $tot' \
      "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE" || true
+  encrypt_status
 
   apk_file="$APK_DIR/${pkg_name}.apk"
   apkeep -a "$pkg_name" "$APK_DIR/" || true
@@ -91,56 +148,57 @@ for pkg_name in $PACKAGES; do
   APP_TITLE=$(format_app_name "$pkg_name")
 
   decompiled_dir="$WORKDIR/decompiled_${pkg_name}"
-  mkdir -p "$REPORT_DIR/${pkg_name}"
+  mkdir -p "$report_path"
 
   # Decompile via JADX
   jadx -d "$decompiled_dir" "$apk_file" --no-res --show-bad-code --threads 4 || echo "[-] JADX warning on $pkg_name"
 
   # Secret Scanning
   if [ -d "$decompiled_dir" ] && [ -n "$COMBINED_PATTERN" ]; then
-    rg -E -i -H -n --column --no-heading --max-filesize 5M "$COMBINED_PATTERN" "$decompiled_dir" > "$REPORT_DIR/${pkg_name}/secrets_raw.txt" || true
+    rg -E -i -H -n --column --no-heading --max-filesize 5M "$COMBINED_PATTERN" "$decompiled_dir" > "$report_path/secrets_raw.txt" || true
   else
-    touch "$REPORT_DIR/${pkg_name}/secrets_raw.txt"
+    touch "$report_path/secrets_raw.txt"
   fi
 
   # MobSF Scan
-  mobsfscan "$decompiled_dir" --json -o "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" || echo "{}" > "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json"
+  mobsfscan "$decompiled_dir" --json -o "$report_path/mobsfscan_raw.json" || echo "{}" > "$report_path/mobsfscan_raw.json"
 
   # Trivy CVE Scan
-  trivy fs "$decompiled_dir" --format json -o "$REPORT_DIR/${pkg_name}/cve_raw.json" || echo '{"Results":[]}' > "$REPORT_DIR/${pkg_name}/cve_raw.json"
+  trivy fs "$decompiled_dir" --format json -o "$report_path/cve_raw.json" || echo '{"Results":[]}' > "$report_path/cve_raw.json"
 
   # Extract non-sensitive severity metrics for instant UI chart loading
-  CRIT_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$REPORT_DIR/${pkg_name}/cve_raw.json" 2>/dev/null || echo 0)
-  HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$REPORT_DIR/${pkg_name}/cve_raw.json" 2>/dev/null || echo 0)
-  MED_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$REPORT_DIR/${pkg_name}/cve_raw.json" 2>/dev/null || echo 0)
-  LOW_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length' "$REPORT_DIR/${pkg_name}/cve_raw.json" 2>/dev/null || echo 0)
+  CRIT_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' "$report_path/cve_raw.json" 2>/dev/null || echo 0)
+  HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' "$report_path/cve_raw.json" 2>/dev/null || echo 0)
+  MED_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' "$report_path/cve_raw.json" 2>/dev/null || echo 0)
+  LOW_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length' "$report_path/cve_raw.json" 2>/dev/null || echo 0)
 
   # Gzip and encrypt output files
-  gzip -c "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" | \
-  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$REPORT_DIR/${pkg_name}/mobsfscan.json.enc" || true
+  gzip -c "$report_path/mobsfscan_raw.json" | \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$report_path/mobsfscan.json.enc" || true
 
-  gzip -c "$REPORT_DIR/${pkg_name}/secrets_raw.txt" | \
-  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$REPORT_DIR/${pkg_name}/secrets.txt.enc" || true
+  gzip -c "$report_path/secrets_raw.txt" | \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$report_path/secrets.txt.enc" || true
 
-  gzip -c "$REPORT_DIR/${pkg_name}/cve_raw.json" | \
-  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$REPORT_DIR/${pkg_name}/cve.json.enc" || true
+  gzip -c "$report_path/cve_raw.json" | \
+  openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 -pass pass:"$REPORT_ENCRYPTION_KEY" -a -A -out "$report_path/cve.json.enc" || true
 
   # Cleanup unencrypted assets
-  rm -f "$REPORT_DIR/${pkg_name}/mobsfscan_raw.json" "$REPORT_DIR/${pkg_name}/secrets_raw.txt" "$REPORT_DIR/${pkg_name}/cve_raw.json"
+  rm -f "$report_path/mobsfscan_raw.json" "$report_path/secrets_raw.txt" "$report_path/cve_raw.json"
   rm -rf "$decompiled_dir" "$APK_DIR/*"
 
   # Update history record with app_name and cve_summary
   jq --arg app "$pkg_name" \
-     --arg app_title "$APP_TITLE" \
+     --arg app_title "$APP_TITLE" --arg report_id "$report_id" \
      --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
      --argjson c "$CRIT_COUNT" \
      --argjson h "$HIGH_COUNT" \
      --argjson m "$MED_COUNT" \
      --argjson l "$LOW_COUNT" \
-     '.history = ([{"package": $app, "app_name": $app_title, "timestamp": $time, "cve_summary": {"critical": $c, "high": $h, "medium": $m, "low": $l}}] + (.history // [] | map(select(.package != $app))))' \
+     '.history = ([{"package": $app, "app_name": $app_title, "report_id": $report_id, "timestamp": $time, "cve_summary": {"critical": $c, "high": $h, "medium": $m, "low": $l}}] + (.history // [] | map(select(.package != $app))))' \
      "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE" || true
+  encrypt_status
 
-  git add public/
+  git add -A public/
   git commit -m "feat(report): encrypted analysis for $pkg_name [skip ci]" || true
   git pull --rebase origin main || true
   git push origin main || echo "[-] Push deferred for $pkg_name"
@@ -149,7 +207,8 @@ for pkg_name in $PACKAGES; do
 done
 
 jq '.status = "Idle" | .current_app = "None"' "$STATUS_FILE" > status.tmp && mv status.tmp "$STATUS_FILE" || true
-git add "$STATUS_FILE"
+encrypt_status
+git add -A public/
 git commit -m "chore: pipeline batch completed [skip ci]" || true
 git pull --rebase origin main || true
 git push origin main || true

@@ -2,7 +2,7 @@
 
 > Automated continuous security analysis pipeline & static dashboard for Android applications.
 
-APKrack automatically harvests target Android packages, fetches APK binaries on-the-fly, decompiles code, performs multi-engine static application security testing (SAST) and CVE scanning, encrypts findings with OpenSSL AES-256-CBC, and serves an interactive, client-side decrypted dashboard via GitHub Pages.
+APKrack automatically harvests target Android packages, fetches APK binaries on-the-fly, decompiles code, performs multi-engine static application security testing (SAST) and CVE scanning, encrypts findings and metadata, and serves an interactive dashboard through a protected Worker gateway.
 
 ---
 
@@ -18,7 +18,7 @@ APKrack automatically harvests target Android packages, fetches APK binaries on-
 │                                                                         │
 │  • .github/workflows/      • public/ (Dashboard, Assets, Scripts)       │
 │  • .github/config/         • public/reports/ (*.enc Gzipped Findings)   │
-│  • .github/scripts/        • public/status.json (Execution State)       │
+│  • .github/scripts/        • public/status.enc (Encrypted State)        │
 └─────────────────────────────────────────────────────────────────────────┘
         │
         │ 2. Scheduled (Daily Midnight UTC) / Manual Dispatch
@@ -36,7 +36,7 @@ APKrack automatically harvests target Android packages, fetches APK binaries on-
 │  │ B. Sequential Target Engine (Zero-Disk-Bloat Loop)               │   │
 │  │                                                                  │   │
 │  │    [1] Check Idempotency   ──► Skip if reports already exist     │   │
-│  │    [2] Update status.json  ──► Push live execution status to UI  │   │
+│  │    [2] Encrypt status.enc ──► Push protected execution state     │   │
 │  │    [3] Download APK        ──► apkeep (on-demand download)       │   │
 │  │    [4] Decompile Code      ──► JADX (multi-threaded, code only)  │   │
 │  │    [5] Secret Scan         ──► ripgrep against rules.yml patterns│   │
@@ -61,7 +61,7 @@ APKrack automatically harvests target Android packages, fetches APK binaries on-
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ USER BROWSER (Dashboard Frontend)                                       │
 │                                                                         │
-│  • Polls status.json every 5s for live progress and target history      │
+│  • Retrieves encrypted status metadata through the authenticated Worker │
 │  • Renders responsive Chart.js vulnerability breakdown instantly        │
 │  • Filters packages in real-time with instant search input              │
 │  • Clicking "Secrets", "MobSF", or "Trivy CVE" prompts decryption key   │
@@ -74,11 +74,12 @@ APKrack automatically harvests target Android packages, fetches APK binaries on-
 
 ## 🔒 Security & Cryptography Model
 
-All security reports committed to the repository are protected using authenticated encryption:
+All security reports committed to the repository are protected using encryption:
 
 - **Algorithm**: AES-256-CBC with random 8-byte salt (`Salted__` header format).
 - **Key Derivation**: PBKDF2 with SHA-256 and **100,000 iterations** (`openssl enc -pbkdf2 -iter 100000`).
 - **Compression**: Pre-compressed with `gzip` prior to encryption to eliminate ~85% of storage space.
+- **Encrypted Metadata**: Package names, application names, timestamps, scan summaries, and opaque report mappings are stored only in encrypted `status.enc`. Public report directories use keyed opaque identifiers rather than package names.
 - **Zero Server-Side Plaintext Storage**: Raw decompiled code, temporary downloads, and raw scan outputs are deleted immediately after encryption.
 - **Client-Side Decryption**: Decryption occurs entirely inside the client's browser using the native browser **Web Crypto API** (`crypto.subtle`) and the native Streams API (`DecompressionStream('gzip')`). The secret decryption key is never transmitted or stored on the server.
 
@@ -116,7 +117,7 @@ All security reports committed to the repository are protected using authenticat
 │       └── pipeline.yml         # GitHub Actions daily schedule & runner setup
 ├── public/
 │   ├── index.html               # Main dashboard UI
-│   ├── status.json              # Live execution state and package history
+│   ├── status.enc               # Encrypted execution state and package history
 │   ├── reports/                 # Encrypted & gzipped report files (*.enc)
 │   └── res/
 │       ├── css/
@@ -139,6 +140,10 @@ In your GitHub repository, navigate to **Settings** > **Secrets and variables** 
 | Secret Name | Description |
 | :--- | :--- |
 | `REPORT_ENCRYPTION_KEY` | Strong passphrase used by OpenSSL and the browser dashboard to encrypt and decrypt analysis reports. |
+
+Configure the separate Worker login secrets and origin variables described in
+[AUTHENTICATION.md](AUTHENTICATION.md). Credentials are intentionally not
+committed or displayed by this project.
 
 ### 2. Custom Secret Rules
 You can customize token and secret matching regexes by editing [`.github/config/rules.yml`](file:///.github/config/rules.yml):

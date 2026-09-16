@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "apkrack",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-16",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "DASHBOARD_ORIGIN": "https://elxmartin.github.io",
+    "PUBLIC_SITE_ORIGIN": "https://elxmartin.github.io/apkrack"
+  }
+}

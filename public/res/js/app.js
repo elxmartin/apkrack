@@ -1,15 +1,41 @@
 let cachedHistory = [];
 let cveChartInstance = null;
 let notifications = [];
+const API_BASE = 'https://apkrack.locamartin.workers.dev';
+const SESSION_TOKEN_KEY = 'WORKSPACE_SESSION_TOKEN';
 
-/**
- * Handle Google OAuth Callback Response & Gatekeeper
- */
-function handleCredentialResponse(response) {
-    if (response && response.credential) {
-        sessionStorage.setItem("GOOGLE_ID_TOKEN", response.credential);
-        addNotification("Google Authentication Successful.");
+function getSessionToken() {
+    return sessionStorage.getItem(SESSION_TOKEN_KEY);
+}
+
+async function submitLogin(event) {
+    event.preventDefault();
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const error = document.getElementById('login-error');
+    const submit = document.getElementById('login-submit');
+
+    error.textContent = '';
+    submit.disabled = true;
+    submit.querySelector('span').textContent = 'Signing in…';
+    try {
+        const response = await fetch(`${API_BASE}/api/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        if (!response.ok) throw new Error('Invalid credentials.');
+        const result = await response.json();
+        if (!result.token) throw new Error('Unable to start a session.');
+        sessionStorage.setItem(SESSION_TOKEN_KEY, result.token);
+        document.getElementById('password').value = '';
+        addNotification('Session started.');
         checkAuthentication();
+    } catch (err) {
+        error.textContent = err.message || 'Unable to sign in.';
+    } finally {
+        submit.disabled = false;
+        submit.querySelector('span').textContent = 'Continue';
     }
 }
 
@@ -17,7 +43,7 @@ function handleCredentialResponse(response) {
  * Enforces mandatory login screen before displaying dashboard
  */
 function checkAuthentication() {
-    const token = sessionStorage.getItem("GOOGLE_ID_TOKEN");
+    const token = getSessionToken();
     const overlay = document.getElementById("login-overlay");
     const app = document.getElementById("dashboard-app");
 
@@ -32,7 +58,7 @@ function checkAuthentication() {
 }
 
 function logoutSession() {
-    sessionStorage.removeItem("GOOGLE_ID_TOKEN");
+    sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem("REPORT_ENCRYPTION_KEY");
     window.location.reload();
 }
@@ -54,6 +80,7 @@ function setEncryptionKey() {
     if (key) {
         sessionStorage.setItem("REPORT_ENCRYPTION_KEY", key);
         updateKeyIndicator();
+        fetchStatus();
     }
 }
 
@@ -104,9 +131,19 @@ function toggleNotifications() {
 }
 
 async function fetchStatus() {
+    const passKey = sessionStorage.getItem('REPORT_ENCRYPTION_KEY');
+    if (!passKey) {
+        cachedHistory = [];
+        renderTable();
+        return;
+    }
     try {
-        const response = await fetch('./status.json?t=' + Date.now(), { cache: 'no-store' });
-        const data = await response.json();
+        const response = await fetch(`${API_BASE}/api/status`, {
+            headers: { Authorization: `Bearer ${getSessionToken()}` },
+            cache: 'no-store'
+        });
+        if (!response.ok) throw new Error(`Status request failed (${response.status}).`);
+        const data = JSON.parse(await decryptRawPayload(await response.text(), passKey));
 
         const stateBadge = document.getElementById('state');
         if (stateBadge) {
@@ -126,6 +163,7 @@ async function fetchStatus() {
         updateCveChart();
     } catch (e) {
         console.error("Dashboard polling error:", e);
+        if (e.message.includes('401') || e.message.includes('403')) logoutSession();
     }
 }
 
@@ -160,9 +198,9 @@ function renderTable() {
             <td style="color: var(--text-muted);">${item.timestamp}</td>
             <td>
                 <div class="report-actions">
-                    <button class="report-btn" onclick="viewReport('${item.package}', 'secrets.txt.enc')">Secrets</button>
-                    <button class="report-btn" onclick="viewReport('${item.package}', 'mobsfscan.json.enc')">Static Recon</button>
-                    <button class="report-btn cve" onclick="viewReport('${item.package}', 'cve.json.enc')">Trivy CVE</button>
+                    <button class="report-btn" onclick="viewReport('${item.report_id}', '${item.package}', 'secrets.txt.enc')">Secrets</button>
+                    <button class="report-btn" onclick="viewReport('${item.report_id}', '${item.package}', 'mobsfscan.json.enc')">Static Recon</button>
+                    <button class="report-btn cve" onclick="viewReport('${item.report_id}', '${item.package}', 'cve.json.enc')">Trivy CVE</button>
                 </div>
             </td>
         `;
@@ -225,7 +263,7 @@ function renderChartJS(labels = [], high = [], medium = [], low = []) {
     });
 }
 
-async function viewReport(packageName, fileName) {
+async function viewReport(reportId, packageName, fileName) {
     const modal = document.getElementById('reportModal');
     const modalTitle = document.getElementById('modalTitle');
     const modalBody = document.getElementById('modalBody');
@@ -243,13 +281,9 @@ async function viewReport(packageName, fileName) {
     modal.style.display = "block";
 
     try {
-        const googleToken = sessionStorage.getItem("GOOGLE_ID_TOKEN");
-        const workerUrl = `https://apkrack.locamartin.workers.dev/api/report?package=${encodeURIComponent(packageName)}&file=${encodeURIComponent(fileName)}`;
-        
-        const headers = {};
-        if (googleToken) {
-            headers["Authorization"] = `Bearer ${googleToken}`;
-        }
+        if (!reportId) throw new Error('This protected report needs to be migrated by the pipeline.');
+        const workerUrl = `${API_BASE}/api/report?id=${encodeURIComponent(reportId)}&file=${encodeURIComponent(fileName)}`;
+        const headers = { Authorization: `Bearer ${getSessionToken()}` };
 
         const response = await fetch(workerUrl, { headers });
 
@@ -280,13 +314,14 @@ function closeModal() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('login-form').addEventListener('submit', submitLogin);
     checkAuthentication();
     updateKeyIndicator();
     if (window.lucide) {
         lucide.createIcons();
     }
     setInterval(() => {
-        if (sessionStorage.getItem("GOOGLE_ID_TOKEN")) {
+        if (getSessionToken()) {
             fetchStatus();
         }
     }, 5000); 

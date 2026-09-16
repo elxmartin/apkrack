@@ -3,36 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APKrack Security Engine Dashboard</title>
+    <title>Secure Workspace</title>
     <link rel="stylesheet" href="./res/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="./res/js/theme.js"></script>
 </head>
 <body>
 
-    <!-- Mandatory Full-Screen Login Gatekeeper -->
-    <div id="login-overlay" style="position: fixed; inset: 0; z-index: 9999; background: #090d16; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-        <div style="text-align: center; max-width: 420px; width: 90%; padding: 2.5rem; background: rgba(15, 23, 42, 0.95); border-radius: 12px; border: 1px solid rgba(51, 65, 85, 0.6); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
-            <h1 style="color: #f8fafc; font-size: 1.75rem; margin-bottom: 0.5rem; font-weight: 700;">APKrack Security Engine</h1>
-            <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 2rem; line-height: 1.5;">Authentication required. Please sign in with an authorized Google account to view security scans.</p>
-            
-            <div id="g_id_onload"
-                data-client_id="7346060566-pn1m675tet9risodlnb9dpr5ut5mr18.apps.googleusercontent.com"
-                data-callback="handleCredentialResponse"
-                data-auto_prompt="false">
-            </div>
-            <div style="display: flex; justify-content: center;">
-                <div class="g_id_signin" data-type="standard" data-theme="dark" data-size="large" data-shape="rectangular"></div>
-            </div>
+    <!-- Credentials are verified by the Worker; none are embedded in this page. -->
+    <div id="login-overlay" class="login-overlay">
+        <div class="login-card">
+            <div class="login-mark" aria-hidden="true"><i data-lucide="shield-check"></i></div>
+            <p class="eyebrow">PRIVATE WORKSPACE</p>
+            <h1>Sign in</h1>
+            <p class="login-copy">Enter your workspace credentials to continue.</p>
+            <form id="login-form" class="login-form" novalidate>
+                <label for="username">Username</label>
+                <input id="username" name="username" type="text" autocomplete="username" required>
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+                <p id="login-error" class="login-error" role="alert" aria-live="polite"></p>
+                <button id="login-submit" class="btn btn-primary login-submit" type="submit">
+                    <span>Continue</span><i data-lucide="arrow-right"></i>
+                </button>
+            </form>
         </div>
     </div>
 
     <!-- Protected Application Dashboard Container -->
     <div id="dashboard-app" class="dashboard-container" style="display: none;">
         <header class="top-bar">
-            <h1 class="brand-title">APKrack</h1>
+            <h1 class="brand-title">Workspace</h1>
 
             <div class="controls-group">
                 <button class="btn icon-btn" onclick="setEncryptionKey()">
@@ -69,7 +71,7 @@
                 <span id="state" class="badge badge-idle">Idle</span>
             </div>
             <div class="metric-card">
-                <span class="metric-label">Active Target</span>
+                <span class="metric-label">Current Item</span>
                 <span id="current-app" class="metric-value" style="font-family: monospace; font-size: 0.95rem;">None</span>
             </div>
             <div class="metric-card">
@@ -80,7 +82,7 @@
 
         <section class="chart-card">
             <div class="chart-header">
-                <h3>Vulnerability Overview (CVE Breakdown)</h3>
+                <h3>Risk Overview</h3>
             </div>
             <div class="chart-container">
                 <canvas id="cveChart"></canvas>
@@ -88,8 +90,8 @@
         </section>
 
         <div class="top-bar" style="margin-top: 1.5rem;">
-            <h3>Analyzed Applications</h3>
-            <input type="text" id="search" class="search-input" placeholder="Filter by package ID or App Name..." oninput="renderTable()">
+            <h3>Workspace Records</h3>
+            <input type="text" id="search" class="search-input" placeholder="Filter records..." oninput="renderTable()">
         </div>
 
         <div class="table-container">
@@ -97,10 +99,10 @@
                 <thead>
                     <tr>
                         <th style="width: 50px; text-align: center;">#</th>
-                        <th>App Name</th>
-                        <th>Package ID</th>
+                        <th>Record</th>
+                        <th>Identifier</th>
                         <th>Timestamp (UTC)</th>
-                        <th>Encrypted Scans</th>
+                        <th>Protected Files</th>
                     </tr>
                 </thead>
                 <tbody id="completed-apps"></tbody>
